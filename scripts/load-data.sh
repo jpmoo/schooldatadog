@@ -44,9 +44,8 @@ for f in "${files[@]}"; do
   fi
 done
 
-# The catalog is real schools & districts only. Drop any statewide/aggregate
-# ("state") rows an older payload may still contain (facts cascade). Harmless
-# once payloads are regenerated with the current ingest, which already skips them.
-psql "$DATABASE_URL" -q -c "DELETE FROM entities WHERE type = 'state';"
+# Post-load reconciliation (idempotent): populate county and drop aggregate rows,
+# so fresh installs and re-loads match the migrations regardless of ordering.
+psql "$DATABASE_URL" -q -f "$ROOT/scripts/reconcile.sql"
 
 echo "All ${#files[@]} artifact(s) loaded successfully."

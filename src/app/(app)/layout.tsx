@@ -32,6 +32,12 @@ export default async function AppLayout({
             >
               Dashboard
             </Link>
+            <Link
+              href="/workshop"
+              className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            >
+              Data Workshop
+            </Link>
             {isAdmin && (
               <Link
                 href="/admin"
