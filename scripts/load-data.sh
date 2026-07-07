@@ -44,4 +44,9 @@ for f in "${files[@]}"; do
   fi
 done
 
+# The catalog is real schools & districts only. Drop any statewide/aggregate
+# ("state") rows an older payload may still contain (facts cascade). Harmless
+# once payloads are regenerated with the current ingest, which already skips them.
+psql "$DATABASE_URL" -q -c "DELETE FROM entities WHERE type = 'state';"
+
 echo "All ${#files[@]} artifact(s) loaded successfully."

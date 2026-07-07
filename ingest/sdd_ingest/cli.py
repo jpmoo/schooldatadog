@@ -16,6 +16,7 @@ from collections import Counter
 from importlib import import_module
 from typing import List
 
+from .entities import infer_entity_type
 from .model import FactRecord
 
 # dataset key -> module name under sdd_ingest.datasets
@@ -83,6 +84,16 @@ def main(argv=None) -> int:
     module = _load(args.dataset)
     print(f"Reading {args.dataset} from {args.path} ({args.year})…")
     records = module.build(args.path, args.year, dict_path=args.dict_path)
+
+    # Drop statewide / NRC aggregate rows ("state" entities) — we only keep real
+    # schools & districts.
+    before = len(records)
+    records = [
+        r for r in records if infer_entity_type(r.entity_cd, r.entity_name) != "state"
+    ]
+    if before != len(records):
+        print(f"Skipped {before - len(records):,} statewide/aggregate facts.")
+
     _summarize(args.dataset, records)
 
     if args.dry_run:

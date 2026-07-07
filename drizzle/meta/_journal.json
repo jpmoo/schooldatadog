@@ -43,6 +43,13 @@
       "when": 1783465670758,
       "tag": "0005_populate_entity_county",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783466477443,
+      "tag": "0006_delete_state_entities",
+      "breakpoints": true
     }
   ]
 }
