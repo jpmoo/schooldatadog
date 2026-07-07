@@ -31,8 +31,9 @@ export default async function AdminPage() {
     },
     {
       title: "Users",
-      body: "Review accounts and grant or revoke admin access.",
-      status: "Next up",
+      body: "Create, edit, and remove accounts; set roles and home districts.",
+      status: "Available",
+      href: "/admin/users",
     },
   ];
 

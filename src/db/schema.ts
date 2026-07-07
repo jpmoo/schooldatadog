@@ -48,6 +48,11 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }),
   // The FIRST user to sign up is promoted to "admin" (see auth/actions.ts).
   role: userRole("role").notNull().default("user"),
+  // Optional "home" district — the district a user cares about by default.
+  homeDistrictId: integer("home_district_id").references(
+    (): AnyPgColumn => entities.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
