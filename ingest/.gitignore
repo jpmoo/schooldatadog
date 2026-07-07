@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+# Extracted Access files / working data — never commit these (multi-GB).
+_extracted/
+_work/

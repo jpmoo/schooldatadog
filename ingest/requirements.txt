@@ -1,0 +1,10 @@
+# Ingestion toolkit dependencies.
+# System requirement: the `mdbtools` CLI (>= 1.0) must be installed and on PATH.
+#   macOS:  brew install mdbtools
+#   Debian: apt-get install mdbtools
+
+pandas>=2.0
+psycopg[binary]>=3.1     # Postgres driver (only needed for real loads, not --dry-run)
+python-dotenv>=1.0       # reads DATABASE_URL from the project .env
+openpyxl>=3.1            # reading .xlsx data dictionaries
+pdfplumber>=0.11         # reading .pdf data dictionaries

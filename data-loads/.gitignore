@@ -1,0 +1,4 @@
+# The data is public, so compressed SQL artifacts ARE committed here — a git
+# pull on the server brings the data with it. Uncompressed .sql files are
+# ignored (large + regenerable); commit the gzipped form instead.
+*.sql

@@ -22,5 +22,20 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/*
+ * Brand logo (assets/SchoolDataDog.svg, viewBox-corrected copy in /public).
+ * The artwork is a single-color black silhouette, so we render it as a CSS
+ * mask filled with `currentColor`. That keeps it crisp at any size and lets it
+ * adapt to the theme — set the text color (e.g. text-slate-900 dark:text-white)
+ * and the logo follows. Size it by height; width derives from the aspect ratio.
+ */
+.brand-logo {
+  display: inline-block;
+  aspect-ratio: 396 / 460;
+  background-color: currentColor;
+  -webkit-mask: url("/SchoolDataDog.svg") center / contain no-repeat;
+  mask: url("/SchoolDataDog.svg") center / contain no-repeat;
 }

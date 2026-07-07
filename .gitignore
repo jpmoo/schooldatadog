@@ -32,6 +32,16 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# large NYSED source data — do not commit (multi-GB Access DBs)
+/sampledata
+
+# python ingestion toolkit
+ingest/.venv/
+ingest/_work/
+ingest/_extracted/
+**/__pycache__/
 
 # vercel
 .vercel
@@ -39,3 +49,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# machine-specific Claude Code settings
+.claude/settings.local.json
