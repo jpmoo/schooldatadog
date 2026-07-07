@@ -9,6 +9,15 @@ import { sessions, users, type UserRole } from "@/db/schema";
 const COOKIE_NAME = "sdd_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
+/**
+ * Scope the cookie to the app's base path so it isn't sent to (or clobbered by)
+ * sibling apps sharing the same host behind the reverse proxy. Matches
+ * next.config's basePath; defaults to "/" at the root.
+ */
+function cookiePath(): string {
+  return process.env.BASE_PATH?.trim().replace(/\/+$/, "") || "/";
+}
+
 export type SessionUser = {
   id: number;
   email: string;
@@ -41,7 +50,7 @@ export async function createSession(userId: number): Promise<void> {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/",
+    path: cookiePath(),
     expires: expiresAt,
   });
 }
@@ -96,6 +105,6 @@ export async function destroySession(): Promise<void> {
   const token = store.get(COOKIE_NAME)?.value;
   if (token) {
     await db.delete(sessions).where(eq(sessions.id, hashToken(token)));
-    store.delete(COOKIE_NAME);
+    store.set(COOKIE_NAME, "", { path: cookiePath(), maxAge: 0 });
   }
 }
