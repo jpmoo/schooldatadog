@@ -1,4 +1,7 @@
 import { redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { getCurrentSession } from "@/lib/auth/session";
 import { login } from "@/lib/auth/actions";
 import { AuthForm } from "../auth-form";
@@ -6,6 +9,12 @@ import { AuthForm } from "../auth-form";
 export default async function LoginPage() {
   const { user } = await getCurrentSession();
   if (user) redirect("/");
+
+  // First run: no accounts yet — send the first visitor to create the admin.
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(users);
+  if (count === 0) redirect("/signup");
 
   return (
     <>

@@ -36,6 +36,10 @@ body {
   display: inline-block;
   aspect-ratio: 396 / 460;
   background-color: currentColor;
-  -webkit-mask: url("/SchoolDataDog.svg") center / contain no-repeat;
-  mask: url("/SchoolDataDog.svg") center / contain no-repeat;
+  /* URL is set by the root layout so it includes basePath (CSS url() is not
+     rewritten by Next's basePath). Falls back to the root path. */
+  -webkit-mask: var(--brand-logo-src, url("/SchoolDataDog.svg")) center / contain
+    no-repeat;
+  mask: var(--brand-logo-src, url("/SchoolDataDog.svg")) center / contain
+    no-repeat;
 }
