@@ -15,6 +15,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Load .env so DATABASE_URL (etc.) is available to this script, drizzle, and psql.
+[ -f .env ] && { set -a; . ./.env; set +a; }
+
 : "${DATABASE_URL:?DATABASE_URL must be set (put it in .env or export it)}"
 
 echo "==> [1/4] Installing dependencies (npm ci)…"

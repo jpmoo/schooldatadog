@@ -12,8 +12,12 @@
 #
 set -euo pipefail
 
-DIR="${1:-./data-loads}"
-: "${DATABASE_URL:?DATABASE_URL must be set (export it or put it in .env)}"
+# Load .env (if present) so DATABASE_URL is available without exporting it.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$ROOT/.env" ] && { set -a; . "$ROOT/.env"; set +a; }
+
+DIR="${1:-$ROOT/data-loads}"
+: "${DATABASE_URL:?DATABASE_URL must be set (put it in .env or export it)}"
 
 command -v psql >/dev/null 2>&1 || { echo "error: psql not found on PATH"; exit 1; }
 [ -d "$DIR" ] || { echo "error: directory not found: $DIR"; exit 1; }
