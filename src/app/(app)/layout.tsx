@@ -37,7 +37,7 @@ export default async function AppLayout({
                 href="/admin"
                 className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
               >
-                Data Management
+                System Settings
               </Link>
             )}
           </nav>

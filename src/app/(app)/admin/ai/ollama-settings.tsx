@@ -26,7 +26,6 @@ function ModelPicker({
   value,
   models,
   disabled,
-  allowNone,
   saved,
   onChange,
 }: {
@@ -35,7 +34,6 @@ function ModelPicker({
   value: string;
   models: OllamaModel[];
   disabled: boolean;
-  allowNone: boolean;
   saved: boolean;
   onChange: (model: string) => void;
 }) {
@@ -58,13 +56,7 @@ function ModelPicker({
           <option value="">Connect to load models…</option>
         ) : (
           <>
-            {allowNone ? (
-              <option value="">— None —</option>
-            ) : (
-              <option value="" disabled>
-                Select a model…
-              </option>
-            )}
+            <option value="">Choose a model…</option>
             {selectionMissing && (
               <option value={value}>{value} (not currently installed)</option>
             )}
@@ -241,7 +233,6 @@ export function OllamaSettings({
             value={inferenceModel}
             models={models}
             disabled={isPending || !modelsLoaded}
-            allowNone={false}
             saved={savedKind === "inference"}
             onChange={(m) => handleSelect("inference", m)}
           />
@@ -251,7 +242,6 @@ export function OllamaSettings({
             value={embeddingModel}
             models={models}
             disabled={isPending || !modelsLoaded}
-            allowNone
             saved={savedKind === "embedding"}
             onChange={(m) => handleSelect("embedding", m)}
           />

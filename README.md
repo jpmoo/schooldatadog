@@ -53,7 +53,7 @@ spreadsheet columns on demand.
 
 4. **Create the admin account** — visit `/signup`. The very first account is
    automatically promoted to system administrator and gets access to the
-   **Data Management** tools.
+   **System Settings** tools.
 
 ## Database scripts
 
@@ -107,7 +107,7 @@ Each artifact `COPY`s into temp staging tables and upserts by natural key
 ## AI (Ollama)
 
 AI features run against an **Ollama** server the admin configures in-app (no env
-var needed). Go to **Data Management → AI / Ollama**, enter the server's IP/port
+var needed). Go to **System Settings → AI / Ollama**, enter the server's IP/port
 (port defaults to `11434`), click **Connect**, then pick two models from the
 refreshable dropdowns:
 

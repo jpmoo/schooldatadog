@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { entities, facts, metrics } from "@/db/schema";
@@ -60,17 +59,14 @@ export default async function DashboardPage() {
             No data yet.{" "}
             {isAdmin ? (
               <>
-                Head to{" "}
-                <Link
-                  href="/admin"
-                  className="font-medium text-indigo-600 hover:underline"
-                >
-                  Data Management
-                </Link>{" "}
-                to define metrics and ingest your first dataset.
+                Load the data payloads on the server with{" "}
+                <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+                  npm run db:load
+                </code>{" "}
+                (see the deployment guide).
               </>
             ) : (
-              <>An administrator needs to ingest data before you can explore it.</>
+              <>An administrator needs to load data before you can explore it.</>
             )}
           </p>
         </div>

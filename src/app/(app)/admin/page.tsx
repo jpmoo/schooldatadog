@@ -21,12 +21,7 @@ export default async function AdminPage() {
     },
     {
       title: "Data Dictionary",
-      body: "Define metrics — the datapoints you ingest — with descriptions, categories, units, and types.",
-      status: "Next up",
-    },
-    {
-      title: "Ingest Data",
-      body: "Upload NYSED CSV/Excel exports, map columns to metrics, and load them into the facts table.",
+      body: "Browse and edit metric definitions — descriptions, categories, units, and types.",
       status: "Next up",
     },
     {
@@ -45,10 +40,10 @@ export default async function AdminPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Data Management
+          System Settings
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
-          Admin tools for defining the data dictionary and ingesting data.
+          Admin tools for AI, the data dictionary, entities, and users.
         </p>
       </div>
 

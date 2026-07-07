@@ -170,7 +170,7 @@ Visit **`https://⟨tailscale-host⟩/schooldatadog`**.
 ## 7. First run
 
 1. Sign up — **the first account becomes admin**.
-2. **Data Management → AI / Ollama**: enter your Ollama IP/port, Connect, pick an
+2. **System Settings → AI / Ollama**: enter your Ollama IP/port, Connect, pick an
    inference model and an embedding model.
 3. Generate semantic-search embeddings (after Ollama is configured):
    ```bash
