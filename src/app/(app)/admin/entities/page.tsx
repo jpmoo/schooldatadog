@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { entities, entityType } from "@/db/schema";
@@ -11,12 +11,13 @@ const PAGE_SIZE = 50;
 export default async function EntitiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; county?: string; page?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const type = (sp.type ?? "").trim();
+  const county = (sp.county ?? "").trim();
   const page = Math.max(1, Number(sp.page) || 1);
 
   const parent = alias(entities, "parent");
@@ -26,9 +27,10 @@ export default async function EntitiesPage({
   if (type && (entityType.enumValues as readonly string[]).includes(type)) {
     conds.push(eq(entities.type, type as (typeof entityType.enumValues)[number]));
   }
+  if (county) conds.push(eq(entities.county, county));
   const where = conds.length ? and(...conds) : undefined;
 
-  const [rows, [{ total }]] = await Promise.all([
+  const [rows, [{ total }], counties] = await Promise.all([
     db
       .select({
         id: entities.id,
@@ -45,12 +47,18 @@ export default async function EntitiesPage({
       .limit(PAGE_SIZE)
       .offset((page - 1) * PAGE_SIZE),
     db.select({ total: sql<number>`count(*)::int` }).from(entities).where(where),
+    db
+      .selectDistinct({ county: entities.county })
+      .from(entities)
+      .where(isNotNull(entities.county))
+      .orderBy(asc(entities.county)),
   ]);
 
   const makeHref = (p: number) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (type) params.set("type", type);
+    if (county) params.set("county", county);
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     return qs ? `/admin/entities?${qs}` : "/admin/entities";
@@ -70,7 +78,7 @@ export default async function EntitiesPage({
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
           {total.toLocaleString()} school{total === 1 ? "" : "s"} &amp; district
-          {(q || type) && " matching"}.
+          {(q || type || county) && " matching"}.
         </p>
       </div>
 
@@ -83,16 +91,25 @@ export default async function EntitiesPage({
           className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
         />
         <select
+          name="county"
+          defaultValue={county}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+        >
+          <option value="">All counties</option>
+          {counties.map((c) => (
+            <option key={c.county} value={c.county ?? ""}>
+              {c.county}
+            </option>
+          ))}
+        </select>
+        <select
           name="type"
           defaultValue={type}
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
         >
           <option value="">All types</option>
-          {entityType.enumValues.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
+          <option value="school">school</option>
+          <option value="district">district</option>
         </select>
         <button
           type="submit"

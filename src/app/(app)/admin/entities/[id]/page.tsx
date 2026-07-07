@@ -60,7 +60,7 @@ export default async function EditEntityPage({
           parentDistrictId: entity.parentDistrictId,
         }}
         districts={districts}
-        entityTypes={entityType.enumValues}
+        entityTypes={entityType.enumValues.filter((t) => t !== "state")}
       />
     </div>
   );

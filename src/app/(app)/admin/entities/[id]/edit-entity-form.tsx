@@ -48,6 +48,12 @@ export function EditEntityForm({
     undefined,
   );
 
+  // Offer school/district; keep the current value if it's something else
+  // (e.g. a legacy statewide-aggregate row) so saving doesn't silently retype it.
+  const typeOptions = entityTypes.includes(initial.type)
+    ? entityTypes
+    : [initial.type, ...entityTypes];
+
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className={labelClass}>
@@ -71,7 +77,7 @@ export function EditEntityForm({
         <label className={labelClass}>
           <span className={labelText}>Type</span>
           <select name="type" defaultValue={initial.type} className={inputClass}>
-            {entityTypes.map((t) => (
+            {typeOptions.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
