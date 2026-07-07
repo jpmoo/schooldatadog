@@ -75,7 +75,8 @@ export function EditMetricForm({
           className={inputClass}
         />
         <span className="text-xs text-slate-400">
-          Editing this re-embeds the metric on the next <code>embed:metrics</code> run.
+          Saving re-embeds this metric automatically for search (when an Ollama
+          embedding model is configured).
         </span>
       </label>
 

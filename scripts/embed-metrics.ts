@@ -13,12 +13,15 @@
  * Only DATABASE_URL (from .env) and a reachable Ollama server are required.
  */
 import "dotenv/config";
-import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import postgres from "postgres";
 import { metrics, settings } from "../src/db/schema";
 import { embedTexts } from "../src/lib/ollama/embed";
+import {
+  buildMetricEmbedInput,
+  metricEmbedHash,
+} from "../src/lib/ollama/metric-embedding";
 
 const SETTING_BASE_URL = "ollama_base_url";
 const SETTING_EMBEDDING_MODEL = "ollama_embedding_model";
@@ -41,23 +44,6 @@ type MetricRow = {
   embeddingModel: string | null;
   embeddingHash: string | null;
 };
-
-/** The text we embed for a metric — name + description + light metadata. */
-function embedInput(m: MetricRow): string {
-  const head = m.description ? `${m.name}. ${m.description}` : m.name;
-  const meta = [
-    m.category ? `Category: ${m.category}` : null,
-    m.unit ? `Unit: ${m.unit}` : null,
-    `Code: ${m.code}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return `${head}\n${meta}`;
-}
-
-function hashOf(model: string, input: string): string {
-  return createHash("sha256").update(`${model}\n${input}`).digest("hex");
-}
 
 async function main() {
   const dbUrl = process.env.DATABASE_URL;
@@ -102,8 +88,8 @@ async function main() {
 
     const todo = rows
       .map((m) => {
-        const input = embedInput(m);
-        return { m, input, hash: hashOf(model, input) };
+        const input = buildMetricEmbedInput(m);
+        return { m, input, hash: metricEmbedHash(model, input) };
       })
       .filter(
         ({ m, hash }) =>

@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { dataType, metrics } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/guards";
+import { reembedMetric } from "@/lib/admin/embed-metric";
 
 export type MetricFormState = { error?: string } | undefined;
 
@@ -63,6 +65,9 @@ export async function updateMetric(
       source: source ?? null,
     })
     .where(eq(metrics.id, metricId));
+
+  // Re-embed after the response so a slow/absent Ollama never blocks the edit.
+  after(() => reembedMetric(metricId));
 
   revalidatePath("/admin/metrics");
   redirect("/admin/metrics");
