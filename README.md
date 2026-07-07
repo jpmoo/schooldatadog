@@ -66,6 +66,8 @@ spreadsheet columns on demand.
 
 ## Deployment workflow
 
+**Full server setup (database creation, service, Caddy): see [DEPLOY.md](DEPLOY.md).**
+
 Develop locally → push to GitHub → pull on the home server. Two things get set
 up on the server: the **schema** (automated, ships in git) and the **data**
 (prebuilt SQL artifacts you copy over).
