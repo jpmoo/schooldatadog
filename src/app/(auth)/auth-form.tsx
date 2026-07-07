@@ -95,29 +95,20 @@ export function AuthForm({ mode, action }: Props) {
 
       <SubmitButton mode={mode} />
 
-      <p className="text-center text-sm text-slate-500 dark:text-slate-400">
-        {isSignup ? (
-          <>
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              className="font-medium text-indigo-600 hover:underline"
-            >
-              Sign in
-            </Link>
-          </>
-        ) : (
-          <>
-            Need an account?{" "}
-            <Link
-              href="/signup"
-              className="font-medium text-indigo-600 hover:underline"
-            >
-              Create one
-            </Link>
-          </>
-        )}
-      </p>
+      {/* Signup is only reachable for the first-run admin bootstrap; from there
+          it links back to login. Login shows no self-signup link — accounts are
+          created by an admin. */}
+      {isSignup && (
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="font-medium text-indigo-600 hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+      )}
     </form>
   );
 }

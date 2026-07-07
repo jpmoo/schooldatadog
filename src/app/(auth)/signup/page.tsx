@@ -10,21 +10,20 @@ export default async function SignupPage() {
   const { user } = await getCurrentSession();
   if (user) redirect("/");
 
-  // Surface the "first account becomes admin" moment to the very first visitor.
+  // Signup exists only to bootstrap the very first (admin) account. Once any
+  // account exists, self-signup is closed — admins create users in System Settings.
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(users);
-  const isFirstAccount = count === 0;
+  if (count > 0) redirect("/login");
 
   return (
     <>
       <h1 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">
-        {isFirstAccount ? "Create the admin account" : "Create your account"}
+        Create the admin account
       </h1>
       <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-        {isFirstAccount
-          ? "This is the first account, so it becomes the system administrator with access to data-management tools."
-          : "Sign up to start exploring school data."}
+        This is the first account, so it becomes the system administrator.
       </p>
       <AuthForm mode="signup" action={signup} />
     </>

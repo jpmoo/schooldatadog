@@ -61,7 +61,7 @@ export function EditEntityForm({
         <input
           value={initial.bedsCode ?? ""}
           readOnly
-          className={`${inputClass} cursor-not-allowed font-mono text-xs opacity-70`}
+          className={`${inputClass} cursor-not-allowed opacity-70`}
         />
         <span className="text-xs text-slate-400">
           The natural key that data loads upsert on — not editable.

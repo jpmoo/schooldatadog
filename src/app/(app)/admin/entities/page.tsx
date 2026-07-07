@@ -137,7 +137,7 @@ export default async function EntitiesPage({
                 <td className="px-4 py-2 text-slate-900 dark:text-slate-100">
                   {e.name}
                 </td>
-                <td className="px-4 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
                   {e.bedsCode || <span className="text-slate-400">—</span>}
                 </td>
                 <td className="px-4 py-2 text-slate-600 dark:text-slate-300">

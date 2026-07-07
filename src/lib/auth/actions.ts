@@ -22,6 +22,9 @@ const signupSchema = credentials.extend({
   name: z.string().trim().max(255).optional(),
 });
 
+// Thrown inside the signup transaction once an account already exists (not exported).
+class SignupsClosedError extends Error {}
+
 export async function signup(
   _prev: AuthState,
   formData: FormData,
@@ -40,21 +43,24 @@ export async function signup(
 
   let newUserId: number;
   try {
-    // Transaction so the "is this the very first account?" check and the insert
-    // are atomic — the first successful signup becomes the system admin.
+    // Signup only bootstraps the first (admin) account; it's atomic so a race
+    // can't create a second. After that, admins create users in System Settings.
     newUserId = await db.transaction(async (tx) => {
       const [{ count }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(users);
-      const role = count === 0 ? "admin" : "user";
+      if (count > 0) throw new SignupsClosedError();
 
       const [row] = await tx
         .insert(users)
-        .values({ email, passwordHash, name: name ?? null, role })
+        .values({ email, passwordHash, name: name ?? null, role: "admin" })
         .returning({ id: users.id });
       return row.id;
     });
   } catch (err: unknown) {
+    if (err instanceof SignupsClosedError) {
+      return { error: "Sign-ups are closed. Ask an admin to create your account." };
+    }
     // 23505 = unique_violation (email already taken).
     if (err && typeof err === "object" && "code" in err && err.code === "23505") {
       return { error: "An account with that email already exists." };
