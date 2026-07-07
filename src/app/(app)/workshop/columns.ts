@@ -1,6 +1,5 @@
 import type { MetricLite } from "@/lib/workshop/types";
 
-export type SortDir = "asc" | "desc";
 export type CalcType = "avg" | "change" | "avgchange" | "rank";
 
 export type DataColumn = {
@@ -9,7 +8,6 @@ export type DataColumn = {
   metric: MetricLite;
   year: string;
   values: Record<number, number | null>;
-  sort: SortDir | null;
 };
 
 export type CalcColumn = {
@@ -19,7 +17,7 @@ export type CalcColumn = {
   name: string;
   sourceIds: string[];
   weights: Record<string, number>;
-  sort: SortDir | null;
+  asPercent: boolean; // change / avgchange: show as % change instead of raw
 };
 
 export type Column = DataColumn | CalcColumn;
@@ -31,12 +29,14 @@ export const CALC_LABELS: Record<CalcType, string> = {
   rank: "Percentile ranking (weighted)",
 };
 
+/** A sort level is an ordered list of keys (Excel-style multi-column sort). */
+export type SortKey = { key: string; dir: "asc" | "desc" }; // key = column id or "name"
+
 function dataVal(col: DataColumn, entityId: number): number | null {
   const v = col.values[entityId];
   return v === undefined ? null : v;
 }
 
-/** Compute a calc column's value map over the currently visible entities. */
 export function computeCalc(
   calc: CalcColumn,
   visibleEntityIds: number[],
@@ -53,7 +53,6 @@ export function computeCalc(
   }
 
   if (calc.calcType === "rank") {
-    // Percentile rank of each entity per source (among visible), weighted-averaged.
     const pct: Record<string, Record<number, number>> = {};
     for (const s of sources) {
       const sorted = visibleEntityIds
@@ -65,7 +64,7 @@ export function computeCalc(
       for (const id of visibleEntityIds) {
         const v = dataVal(s, id);
         if (v === null || n === 0) continue;
-        let lo = 0, hi = n; // count of values <= v (binary search)
+        let lo = 0, hi = n;
         while (lo < hi) {
           const mid = (lo + hi) >> 1;
           if (sorted[mid] <= v) lo = mid + 1;
@@ -97,13 +96,18 @@ export function computeCalc(
       out[id] = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
     } else if (calc.calcType === "change") {
       const first = series[0], last = series[series.length - 1];
-      out[id] = first !== null && last !== null ? last - first : null;
+      if (first === null || last === null) out[id] = null;
+      else if (calc.asPercent) out[id] = first === 0 ? null : ((last - first) / first) * 100;
+      else out[id] = last - first;
     } else {
       // avgchange
       const diffs: number[] = [];
       for (let i = 1; i < series.length; i++) {
         const a = series[i - 1], b = series[i];
-        if (a !== null && b !== null) diffs.push(b - a);
+        if (a === null || b === null) continue;
+        if (calc.asPercent) {
+          if (a !== 0) diffs.push(((b - a) / a) * 100);
+        } else diffs.push(b - a);
       }
       out[id] = diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
     }
@@ -111,6 +115,7 @@ export function computeCalc(
   return out;
 }
 
+/** Format a data value using its metric's type/unit. */
 export function formatValue(
   v: number | null | undefined,
   dataType?: string,
@@ -121,8 +126,41 @@ export function formatValue(
     Number.isInteger(n)
       ? n.toLocaleString()
       : n.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  if (dataType === "percent") return `${round(v)}%`;
+  if (dataType === "percent" || unit === "%") return `${round(v)}%`;
   if (dataType === "currency") return `$${round(v)}`;
-  if (unit === "%") return `${round(v)}%`;
   return round(v);
+}
+
+/** Format a calculated-column value. */
+export function formatCalc(col: CalcColumn, v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const round = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  if (col.calcType === "rank") return round(v);
+  if ((col.calcType === "change" || col.calcType === "avgchange") && col.asPercent)
+    return `${v > 0 ? "+" : ""}${round(v)}%`;
+  return `${v > 0 && (col.calcType === "change" || col.calcType === "avgchange") ? "+" : ""}${round(v)}`;
+}
+
+/** Compare two entities by an ordered list of sort keys; nulls sort last. */
+export function compareBySortKeys(
+  keys: SortKey[],
+  valueOf: (key: string, entityId: number) => number | string | null,
+  a: { id: number; name: string },
+  b: { id: number; name: string },
+): number {
+  for (const k of keys) {
+    const va = k.key === "name" ? a.name : valueOf(k.key, a.id);
+    const vb = k.key === "name" ? b.name : valueOf(k.key, b.id);
+    const an = va === null || va === undefined;
+    const bn = vb === null || vb === undefined;
+    if (an && bn) continue;
+    if (an) return 1; // nulls last, regardless of direction
+    if (bn) return -1;
+    let cmp: number;
+    if (typeof va === "string" || typeof vb === "string")
+      cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+    else cmp = (va as number) - (vb as number);
+    if (cmp !== 0) return k.dir === "asc" ? cmp : -cmp;
+  }
+  return a.name.localeCompare(b.name, undefined, { numeric: true });
 }

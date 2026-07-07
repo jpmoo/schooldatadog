@@ -13,17 +13,22 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { getColumnValues, searchMetrics } from "@/lib/workshop/actions";
-import type { MetricLite } from "@/lib/workshop/types";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
+import type { MetricLite } from "@/lib/workshop/types";
 import { CalcDialog, type CalcConfig } from "./calc-dialog";
 import {
+  compareBySortKeys,
   computeCalc,
+  formatCalc,
   formatValue,
   type CalcColumn,
   type Column,
   type DataColumn,
-  type SortDir,
+  type SortKey,
 } from "./columns";
+
+const natCompare = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { numeric: true });
 
 // ── drag sources / drop targets ───────────────────────────────────────────
 
@@ -70,11 +75,13 @@ function CalcSource() {
 
 function ColumnHeader({
   col,
+  sortLabel,
   onContext,
   onRemove,
 }: {
   col: Column;
-  onContext: (e: React.MouseEvent, colId: string) => void;
+  sortLabel: string;
+  onContext: (e: React.MouseEvent, col: Column) => void;
   onRemove: (id: string) => void;
 }) {
   const drag = useDraggable({ id: `col:${col.id}`, data: { type: "col" } });
@@ -85,12 +92,11 @@ function ColumnHeader({
   };
   const title = col.kind === "data" ? col.metric.name : col.name;
   const sub = col.kind === "data" ? col.year : "calculated";
-  const arrow = col.sort === "asc" ? " ▲" : col.sort === "desc" ? " ▼" : "";
 
   return (
     <th
       ref={setRef}
-      onContextMenu={(e) => onContext(e, col.id)}
+      onContextMenu={(e) => onContext(e, col)}
       className={`sticky top-0 z-10 min-w-[140px] cursor-grab border-b border-l border-slate-200 bg-slate-50 px-3 py-2 text-left align-top dark:border-slate-800 dark:bg-slate-900 ${
         drop.isOver ? "bg-indigo-100 dark:bg-indigo-950" : ""
       } ${drag.isDragging ? "opacity-40" : ""}`}
@@ -98,8 +104,7 @@ function ColumnHeader({
       <div className="flex items-start justify-between gap-1">
         <span {...drag.listeners} {...drag.attributes} className="flex-1">
           <span className="block text-xs font-semibold text-slate-800 dark:text-slate-100">
-            {title}
-            {arrow}
+            {title} <span className="font-normal text-indigo-500">{sortLabel}</span>
           </span>
           <span className="block text-[11px] font-normal text-slate-400">
             {col.kind === "calc" ? "ƒ " : ""}
@@ -135,18 +140,46 @@ function RemoveZone({ active }: { active: boolean }) {
   );
 }
 
+function SheetDrop({
+  children,
+  scrollRef,
+}: {
+  children: React.ReactNode;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: "sheet" });
+  return (
+    <div
+      ref={(n) => {
+        setNodeRef(n);
+        scrollRef.current = n;
+      }}
+      className={`min-h-0 flex-1 overflow-auto rounded-lg border ${
+        isOver ? "border-indigo-400" : "border-slate-200 dark:border-slate-800"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
 // ── main ──────────────────────────────────────────────────────────────────
+
+type Row = { entity: WorkshopEntity; type: "district" | "school"; collapsible: boolean };
+type Ctx = { key: string; kind: "name" | "data" | "calc"; calcId?: string; x: number; y: number };
 
 export function Workshop({
   years,
   counties,
   entities,
   initialMetrics,
+  homeDistrictId,
 }: {
   years: string[];
   counties: string[];
   entities: WorkshopEntity[];
   initialMetrics: MetricLite[];
+  homeDistrictId: number | null;
 }) {
   const [year, setYear] = useState(years[0] ?? "");
   const [query, setQuery] = useState("");
@@ -157,23 +190,23 @@ export function Workshop({
   const [county, setCounty] = useState("");
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [entityPanel, setEntityPanel] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState<Set<string>>(new Set());
-  const [calcOpen, setCalcOpen] = useState(false);
-  const [ctx, setCtx] = useState<{ colId: string; x: number; y: number } | null>(null);
+  const [districtSort, setDistrictSort] = useState<SortKey[]>([]);
+  const [schoolSort, setSchoolSort] = useState<SortKey[]>([]);
+
+  const [calcDialog, setCalcDialog] = useState<{ editId: string | null } | null>(null);
+  const [ctx, setCtx] = useState<Ctx | null>(null);
   const [dragging, setDragging] = useState<{ kind: string; label: string } | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // Render the drag-and-drop tree only after mount so dnd-kit's generated
-  // accessibility ids don't cause a server/client hydration mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // debounced search
   useEffect(() => {
     const t = setTimeout(() => {
       startSearch(async () => setMetrics(await searchMetrics(query)));
@@ -181,7 +214,7 @@ export function Workshop({
     return () => clearTimeout(t);
   }, [query]);
 
-  // ── derived ──
+  // ── derived data ──
   const visibleEntities = useMemo(
     () =>
       entities.filter((e) => {
@@ -222,32 +255,58 @@ export function Workshop({
     }
     return calcValues[col.id]?.[entityId] ?? null;
   };
+  const valueOf = (key: string, entityId: number): number | string | null => {
+    if (key === "name") return null;
+    const col = columnsById[key];
+    return col ? getVal(col, entityId) : null;
+  };
 
-  const sortCol = columns.find((c) => c.sort) ?? null;
+  // ── build rows (tree in "both" view) ──
   const rows = useMemo(() => {
-    const arr = [...visibleEntities];
-    if (sortCol) {
-      const dir = sortCol.sort === "asc" ? 1 : -1;
-      arr.sort((a, b) => {
-        const va = getVal(sortCol, a.id);
-        const vb = getVal(sortCol, b.id);
-        if (va === null && vb === null) return a.name.localeCompare(b.name);
-        if (va === null) return 1;
-        if (vb === null) return -1;
-        return (va - vb) * dir;
-      });
+    const cmpD = (a: WorkshopEntity, b: WorkshopEntity) =>
+      compareBySortKeys(districtSort, valueOf, a, b);
+    const cmpS = (a: WorkshopEntity, b: WorkshopEntity) =>
+      compareBySortKeys(schoolSort, valueOf, a, b);
+
+    if (viewMode === "districts") {
+      return [...visibleEntities]
+        .sort(cmpD)
+        .map((e) => ({ entity: e, type: "district" as const, collapsible: false }));
     }
-    return arr;
+
+    const districts = visibleEntities.filter((e) => e.type === "district").sort(cmpD);
+    const schools = visibleEntities.filter((e) => e.type === "school");
+    const byParent = new Map<number, WorkshopEntity[]>();
+    for (const s of schools) {
+      const p = s.parentDistrictId;
+      if (p == null) continue;
+      (byParent.get(p) ?? byParent.set(p, []).get(p)!).push(s);
+    }
+    const districtIds = new Set(districts.map((d) => d.id));
+    const out: Row[] = [];
+    for (const d of districts) {
+      const kids = byParent.get(d.id) ?? [];
+      out.push({ entity: d, type: "district", collapsible: kids.length > 0 });
+      if (kids.length && !collapsed.has(d.id)) {
+        for (const s of [...kids].sort(cmpS))
+          out.push({ entity: s, type: "school", collapsible: false });
+      }
+    }
+    const orphans = schools.filter(
+      (s) => s.parentDistrictId == null || !districtIds.has(s.parentDistrictId),
+    );
+    for (const s of orphans.sort(cmpS))
+      out.push({ entity: s, type: "school", collapsible: false });
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleEntities, sortCol, calcValues, columns]);
+  }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns]);
 
   // ── column ops ──
   async function addDataColumn(metric: MetricLite, yr: string) {
     if (columns.some((c) => c.kind === "data" && c.metric.code === metric.code && c.year === yr))
-      return; // no duplicate datapoint
+      return;
     const id = `data-${metric.code}-${yr}-${columns.length}-${Math.round(performance.now())}`;
-    const col: DataColumn = { id, kind: "data", metric, year: yr, values: {}, sort: null };
-    setColumns((cs) => [...cs, col]);
+    setColumns((cs) => [...cs, { id, kind: "data", metric, year: yr, values: {} }]);
     setLoading((s) => new Set(s).add(id));
     const vals = await getColumnValues(metric.code, yr);
     const map: Record<number, number | null> = {};
@@ -260,34 +319,31 @@ export function Workshop({
     });
   }
 
-  function addCalcColumn(config: CalcConfig) {
-    const id = `calc-${columns.length}-${Math.round(performance.now())}`;
-    const col: CalcColumn = {
-      id,
-      kind: "calc",
-      calcType: config.calcType,
-      name: config.name,
-      sourceIds: config.sourceIds,
-      weights: config.weights,
-      sort: null,
-    };
-    setColumns((cs) => [...cs, col]);
-    setCalcOpen(false);
+  function submitCalc(config: CalcConfig) {
+    const editId = calcDialog?.editId ?? null;
+    if (editId) {
+      setColumns((cs) =>
+        cs.map((c) =>
+          c.id === editId && c.kind === "calc"
+            ? { ...c, ...config, id: editId, kind: "calc" }
+            : c,
+        ),
+      );
+    } else {
+      const id = `calc-${columns.length}-${Math.round(performance.now())}`;
+      setColumns((cs) => [...cs, { id, kind: "calc", ...config }]);
+    }
+    setCalcDialog(null);
   }
 
   const removeColumn = (id: string) =>
     setColumns((cs) =>
       cs
         .filter((c) => c.id !== id)
-        // also drop the removed column from any calc field's sources
         .map((c) =>
-          c.kind === "calc"
-            ? { ...c, sourceIds: c.sourceIds.filter((s) => s !== id) }
-            : c,
+          c.kind === "calc" ? { ...c, sourceIds: c.sourceIds.filter((s) => s !== id) } : c,
         ),
     );
-  const setSort = (id: string, dir: SortDir | null) =>
-    setColumns((cs) => cs.map((c) => ({ ...c, sort: c.id === id ? dir : null })));
 
   function reorder(fromId: string, toId: string) {
     setColumns((cs) => {
@@ -301,18 +357,63 @@ export function Workshop({
     });
   }
 
+  // ── sorting helpers ──
+  function applySort(level: "district" | "school", key: string, dir: "asc" | "desc", add: boolean) {
+    const setter = level === "district" ? setDistrictSort : setSchoolSort;
+    setter((prev) => {
+      const rest = prev.filter((k) => k.key !== key);
+      return add ? [...rest, { key, dir }] : [{ key, dir }];
+    });
+    setCtx(null);
+  }
+  const clearSorts = () => {
+    setDistrictSort([]);
+    setSchoolSort([]);
+    setCtx(null);
+  };
+  function sortLabel(key: string): string {
+    const parts: string[] = [];
+    const d = districtSort.findIndex((k) => k.key === key);
+    if (d >= 0)
+      parts.push((districtSort[d].dir === "asc" ? "▲" : "▼") + (districtSort.length > 1 ? d + 1 : ""));
+    const s = schoolSort.findIndex((k) => k.key === key);
+    if (s >= 0 && viewMode === "both")
+      parts.push("ˢ" + (schoolSort[s].dir === "asc" ? "▲" : "▼"));
+    return parts.join(" ");
+  }
+
+  const collapseAll = () =>
+    setCollapsed(new Set(visibleEntities.filter((e) => e.type === "district").map((e) => e.id)));
+  const expandAll = () => setCollapsed(new Set());
+
+  function scrollToHome() {
+    if (homeDistrictId == null) return;
+    const home = entities.find((e) => e.id === homeDistrictId);
+    if (!home) return;
+    if (county && home.county !== county) setCounty(""); // reveal it
+    if (hidden.has(homeDistrictId)) {
+      const n = new Set(hidden);
+      n.delete(homeDistrictId);
+      setHidden(n);
+    }
+    setTimeout(() => {
+      scrollRef.current
+        ?.querySelector(`[data-eid="${homeDistrictId}"]`)
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 80);
+  }
+
+  // ── drag handlers ──
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
-    if (id.startsWith("metric:")) {
-      const m = e.active.data.current?.metric as MetricLite | undefined;
-      setDragging({ kind: "metric", label: m?.name ?? "metric" });
-    } else if (id === "calc-source") setDragging({ kind: "calc", label: "Calculated Field" });
+    if (id.startsWith("metric:"))
+      setDragging({ kind: "metric", label: (e.active.data.current?.metric as MetricLite)?.name ?? "" });
+    else if (id === "calc-source") setDragging({ kind: "calc", label: "Calculated Field" });
     else if (id.startsWith("col:")) {
       const col = columnsById[id.slice(4)];
       setDragging({ kind: "col", label: col?.kind === "data" ? col.metric.name : "column" });
     }
   }
-
   function onDragEnd(e: DragEndEvent) {
     setDragging(null);
     const { active, over } = e;
@@ -325,7 +426,7 @@ export function Workshop({
         if (m) void addDataColumn(m, year);
       }
     } else if (a === "calc-source") {
-      if (o !== "remove") setCalcOpen(true);
+      if (o !== "remove") setCalcDialog({ editId: null });
     } else if (a.startsWith("col:")) {
       const colId = a.slice(4);
       if (o === "remove") removeColumn(colId);
@@ -334,15 +435,18 @@ export function Workshop({
   }
 
   const dataColumns = columns.filter((c): c is DataColumn => c.kind === "data");
+  const editingCalc =
+    calcDialog?.editId != null
+      ? (columns.find((c) => c.id === calcDialog.editId) as CalcColumn | undefined)
+      : undefined;
+
   const grouped = useMemo(() => {
-    if (query.trim()) return null; // flat ranked list when searching
+    if (query.trim()) return null;
     const map = new Map<string, MetricLite[]>();
-    for (const m of metrics) {
-      const k = m.category ?? "Other";
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(m);
-    }
-    return [...map.entries()];
+    for (const m of metrics) (map.get(m.category ?? "Other") ?? map.set(m.category ?? "Other", []).get(m.category ?? "Other")!).push(m);
+    return [...map.entries()].map(
+      ([cat, list]) => [cat, [...list].sort((a, b) => natCompare(a.name, b.name))] as const,
+    );
   }, [metrics, query]);
 
   if (!mounted) {
@@ -353,6 +457,8 @@ export function Workshop({
     );
   }
 
+  const btn = "rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+
   return (
     <DndContext
       sensors={sensors}
@@ -360,20 +466,13 @@ export function Workshop({
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragging(null)}
     >
-      <div
-        className="flex h-[calc(100vh-8rem)] gap-3"
-        onClick={() => ctx && setCtx(null)}
-      >
-        {/* LEFT 30% — metrics */}
+      <div className="flex h-[calc(100vh-8rem)] gap-3" onClick={() => ctx && setCtx(null)}>
+        {/* LEFT 30% */}
         <aside className="flex w-[30%] min-w-[260px] flex-col gap-3 overflow-hidden">
           <CalcSource />
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-slate-600 dark:text-slate-300">Year</label>
-            <select
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-            >
+            <select value={year} onChange={(e) => setYear(e.target.value)} className={`flex-1 ${btn}`}>
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
@@ -410,23 +509,14 @@ export function Workshop({
           </div>
         </aside>
 
-        {/* RIGHT 70% — sheet */}
+        {/* RIGHT 70% */}
         <section className="flex flex-1 flex-col gap-2 overflow-hidden">
-          {/* filters */}
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 text-sm dark:border-slate-800 dark:bg-slate-900">
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as "districts" | "both")}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-            >
+            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as "districts" | "both")} className={btn}>
               <option value="districts">Districts only</option>
               <option value="both">Districts &amp; schools</option>
             </select>
-            <select
-              value={county}
-              onChange={(e) => setCounty(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-            >
+            <select value={county} onChange={(e) => setCounty(e.target.value)} className={btn}>
               <option value="">All counties</option>
               {counties.map((c) => (
                 <option key={c} value={c}>
@@ -434,48 +524,58 @@ export function Workshop({
                 </option>
               ))}
             </select>
-            <button
-              onClick={() => setEntityPanel((v) => !v)}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700 dark:text-slate-200"
-            >
+            <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
               Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
             </button>
-            <select
-              disabled
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-slate-400 dark:border-slate-800"
-              title="Saved groups (coming soon)"
-            >
+            <select disabled className="rounded-lg border border-slate-200 px-2 py-1.5 text-slate-400 dark:border-slate-800" title="Saved groups (coming soon)">
               <option>Saved groups…</option>
             </select>
+            {homeDistrictId != null && (
+              <button onClick={scrollToHome} className="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500">
+                ⌖ My district
+              </button>
+            )}
             <span className="ml-auto text-xs text-slate-400">
-              {rows.length.toLocaleString()} rows · {columns.length} column
-              {columns.length === 1 ? "" : "s"}
+              {rows.length.toLocaleString()} rows · {columns.length} column{columns.length === 1 ? "" : "s"}
             </span>
           </div>
 
           <RemoveZone active={dragging?.kind === "col"} />
 
-          {/* grid */}
-          <SheetDrop>
+          <SheetDrop scrollRef={scrollRef}>
             {columns.length === 0 ? (
               <div className="flex h-full items-center justify-center p-8 text-center text-sm text-slate-400">
-                Drag metrics here to build columns. Right-click a column header to sort;
-                drag headers to reorder or onto the remove bar to delete.
+                Drag metrics here to build columns. Right-click a column or the name header to sort,
+                edit, or collapse; drag headers to reorder or onto the remove bar to delete.
               </div>
             ) : (
               <table className="border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr>
-                    <th className="sticky left-0 top-0 z-20 min-w-[220px] border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800">
-                      School / District
+                    <th
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCtx({ key: "name", kind: "name", x: e.clientX, y: e.clientY });
+                      }}
+                      className="sticky left-0 top-0 z-20 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
+                    >
+                      School / District{" "}
+                      <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
                     </th>
                     {columns.map((col) => (
                       <ColumnHeader
                         key={col.id}
                         col={col}
-                        onContext={(e, id) => {
+                        sortLabel={sortLabel(col.id)}
+                        onContext={(e, c) => {
                           e.preventDefault();
-                          setCtx({ colId: id, x: e.clientX, y: e.clientY });
+                          setCtx({
+                            key: c.id,
+                            kind: c.kind,
+                            calcId: c.kind === "calc" ? c.id : undefined,
+                            x: e.clientX,
+                            y: e.clientY,
+                          });
                         }}
                         onRemove={removeColumn}
                       />
@@ -483,45 +583,64 @@ export function Workshop({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((e) => (
-                    <tr key={e.id} className="group">
-                      <td className="sticky left-0 z-10 min-w-[220px] border-b border-slate-100 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-950">
-                        <span className="text-slate-800 dark:text-slate-100">{e.name}</span>
-                        <span className="ml-1 text-xs text-slate-400">
-                          {e.type === "school" ? "· school" : ""}
-                        </span>
-                      </td>
-                      {columns.map((col) => {
-                        const v = getVal(col, e.id);
-                        const dt = col.kind === "data" ? col.metric.dataType : undefined;
-                        const unit = col.kind === "data" ? col.metric.unit : "%";
-                        return (
-                          <td
-                            key={col.id}
-                            className="border-b border-l border-slate-100 px-3 py-1.5 text-right tabular-nums text-slate-700 dark:border-slate-800 dark:text-slate-200"
-                          >
-                            {loading.has(col.id) ? (
-                              <span className="text-slate-300">…</span>
-                            ) : (
-                              formatValue(v, dt, unit)
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {rows.map(({ entity: e, type, collapsible }) => {
+                    const isHome = e.id === homeDistrictId;
+                    return (
+                      <tr key={e.id} data-eid={e.id} className={isHome ? "bg-indigo-50 dark:bg-indigo-950/40" : ""}>
+                        <td
+                          className={`sticky left-0 z-10 min-w-[240px] border-b border-slate-100 px-3 py-1.5 dark:border-slate-800 ${
+                            isHome ? "bg-indigo-50 dark:bg-indigo-950/40" : "bg-white dark:bg-slate-950"
+                          } ${type === "school" ? "pl-8" : ""}`}
+                        >
+                          {collapsible && (
+                            <button
+                              onClick={() =>
+                                setCollapsed((prev) => {
+                                  const n = new Set(prev);
+                                  if (n.has(e.id)) n.delete(e.id);
+                                  else n.add(e.id);
+                                  return n;
+                                })
+                              }
+                              className="mr-1 text-slate-400 hover:text-slate-700"
+                            >
+                              {collapsed.has(e.id) ? "▸" : "▾"}
+                            </button>
+                          )}
+                          <span className={`${type === "district" ? "font-medium" : ""} text-slate-800 dark:text-slate-100`}>
+                            {e.name}
+                          </span>
+                          {isHome && <span className="ml-1 text-xs font-medium text-indigo-500">· home</span>}
+                        </td>
+                        {columns.map((col) => {
+                          const v = getVal(col, e.id);
+                          return (
+                            <td
+                              key={col.id}
+                              className={`border-b border-l border-slate-100 px-3 py-1.5 text-right tabular-nums dark:border-slate-800 ${
+                                isHome ? "" : ""
+                              } text-slate-700 dark:text-slate-200`}
+                            >
+                              {loading.has(col.id)
+                                ? "…"
+                                : col.kind === "data"
+                                  ? formatValue(v, col.metric.dataType, col.metric.unit)
+                                  : formatCalc(col, v)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
           </SheetDrop>
         </section>
 
-        {/* entity on/off panel */}
         {entityPanel && (
           <EntityPanel
-            entities={entities.filter(
-              (e) => viewMode === "both" || e.type === "district",
-            )}
+            entities={entities.filter((e) => viewMode === "both" || e.type === "district")}
             county={county}
             hidden={hidden}
             setHidden={setHidden}
@@ -529,35 +648,7 @@ export function Workshop({
           />
         )}
 
-        {/* context menu */}
-        {ctx && (
-          <div
-            className="fixed z-50 w-40 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
-            style={{ top: ctx.y, left: ctx.x }}
-          >
-            {(["asc", "desc"] as SortDir[]).map((d) => (
-              <button
-                key={d}
-                onClick={() => {
-                  setSort(ctx.colId, d);
-                  setCtx(null);
-                }}
-                className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Sort {d === "asc" ? "ascending ▲" : "descending ▼"}
-              </button>
-            ))}
-            <button
-              onClick={() => {
-                setSort(ctx.colId, null);
-                setCtx(null);
-              }}
-              className="block w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              Clear sort
-            </button>
-          </div>
-        )}
+        {ctx && <SortMenu ctx={ctx} view={viewMode} applySort={applySort} clearSorts={clearSorts} onEdit={(id) => { setCalcDialog({ editId: id }); setCtx(null); }} collapseAll={() => { collapseAll(); setCtx(null); }} expandAll={() => { expandAll(); setCtx(null); }} />}
       </div>
 
       <DragOverlay>
@@ -568,30 +659,89 @@ export function Workshop({
         )}
       </DragOverlay>
 
-      {calcOpen && (
+      {calcDialog && (
         <CalcDialog
-          sources={dataColumns.map((c) => ({
-            id: c.id,
-            label: `${c.metric.name} (${c.year})`,
-          }))}
-          onConfirm={addCalcColumn}
-          onClose={() => setCalcOpen(false)}
+          sources={dataColumns.map((c) => ({ id: c.id, label: `${c.metric.name} (${c.year})` }))}
+          initial={
+            editingCalc
+              ? {
+                  calcType: editingCalc.calcType,
+                  name: editingCalc.name,
+                  sourceIds: editingCalc.sourceIds,
+                  weights: editingCalc.weights,
+                  asPercent: editingCalc.asPercent,
+                }
+              : undefined
+          }
+          onConfirm={submitCalc}
+          onClose={() => setCalcDialog(null)}
         />
       )}
     </DndContext>
   );
 }
 
-function SheetDrop({ children }: { children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: "sheet" });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`min-h-0 flex-1 overflow-auto rounded-lg border ${
-        isOver ? "border-indigo-400" : "border-slate-200 dark:border-slate-800"
-      }`}
-    >
+// ── sort context menu ──
+function SortMenu({
+  ctx,
+  view,
+  applySort,
+  clearSorts,
+  onEdit,
+  collapseAll,
+  expandAll,
+}: {
+  ctx: Ctx;
+  view: "districts" | "both";
+  applySort: (level: "district" | "school", key: string, dir: "asc" | "desc", add: boolean) => void;
+  clearSorts: () => void;
+  onEdit: (id: string) => void;
+  collapseAll: () => void;
+  expandAll: () => void;
+}) {
+  const Item = ({ children, onClick }: { children: React.ReactNode; onClick: () => void }) => (
+    <button onClick={onClick} className="block w-full px-3 py-1 text-left hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
       {children}
+    </button>
+  );
+  const Hdr = ({ children }: { children: React.ReactNode }) => (
+    <p className="px-3 pt-2 pb-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{children}</p>
+  );
+  const level = (l: "district" | "school", label: string) => (
+    <>
+      <Hdr>{label}</Hdr>
+      <Item onClick={() => applySort(l, ctx.key, "asc", false)}>Sort ascending ▲</Item>
+      <Item onClick={() => applySort(l, ctx.key, "desc", false)}>Sort descending ▼</Item>
+      <Item onClick={() => applySort(l, ctx.key, "asc", true)}>Add to sort ▲</Item>
+      <Item onClick={() => applySort(l, ctx.key, "desc", true)}>Add to sort ▼</Item>
+    </>
+  );
+
+  return (
+    <div className="fixed z-50 w-52 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900" style={{ top: ctx.y, left: ctx.x }}>
+      {ctx.kind === "calc" && ctx.calcId && (
+        <>
+          <Item onClick={() => onEdit(ctx.calcId!)}>Edit calculated field…</Item>
+          <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+        </>
+      )}
+      {view === "both" ? (
+        <>
+          {level("district", "Districts")}
+          {level("school", "Schools")}
+        </>
+      ) : (
+        level("district", "Sort")
+      )}
+      <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+      {ctx.kind === "name" && view === "both" && (
+        <>
+          <Item onClick={collapseAll}>Collapse all</Item>
+          <Item onClick={expandAll}>Expand all</Item>
+          <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+        </>
+      )}
+      <Item onClick={clearSorts}>Clear sorts</Item>
     </div>
   );
 }
@@ -619,23 +769,12 @@ function EntityPanel({
   return (
     <div className="fixed right-4 top-24 z-40 flex max-h-[70vh] w-72 flex-col rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-          Show / hide entities
-        </span>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
-          ✕
-        </button>
+        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Show / hide entities</span>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
       </div>
       <div className="flex gap-2 border-b border-slate-100 px-3 py-1.5 text-xs dark:border-slate-800">
-        <button onClick={() => setHidden(new Set())} className="text-indigo-600 hover:underline">
-          Show all
-        </button>
-        <button
-          onClick={() => setHidden(new Set(list.map((e) => e.id)))}
-          className="text-indigo-600 hover:underline"
-        >
-          Hide all
-        </button>
+        <button onClick={() => setHidden(new Set())} className="text-indigo-600 hover:underline">Show all</button>
+        <button onClick={() => setHidden(new Set(list.map((e) => e.id)))} className="text-indigo-600 hover:underline">Hide all</button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {list.map((e) => (

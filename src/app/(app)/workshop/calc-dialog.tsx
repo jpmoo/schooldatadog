@@ -8,23 +8,29 @@ export type CalcConfig = {
   name: string;
   sourceIds: string[];
   weights: Record<string, number>;
+  asPercent: boolean;
 };
 
 type SourceOption = { id: string; label: string };
 
 export function CalcDialog({
   sources,
+  initial,
   onConfirm,
   onClose,
 }: {
   sources: SourceOption[];
+  initial?: CalcConfig;
   onConfirm: (config: CalcConfig) => void;
   onClose: () => void;
 }) {
-  const [calcType, setCalcType] = useState<CalcType>("avg");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [weights, setWeights] = useState<Record<string, number>>({});
-  const [name, setName] = useState("");
+  const [calcType, setCalcType] = useState<CalcType>(initial?.calcType ?? "avg");
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(initial?.sourceIds ?? []),
+  );
+  const [weights, setWeights] = useState<Record<string, number>>(initial?.weights ?? {});
+  const [name, setName] = useState(initial?.name ?? "");
+  const [asPercent, setAsPercent] = useState(initial?.asPercent ?? false);
 
   const selectedInOrder = useMemo(
     () => sources.filter((s) => selected.has(s.id)).map((s) => s.id),
@@ -39,13 +45,12 @@ export function CalcDialog({
       return next;
     });
 
-  const defaultName = () => {
-    const label = CALC_LABELS[calcType].split(" (")[0];
-    return name.trim() || label;
-  };
+  const isChange = calcType === "change" || calcType === "avgchange";
+  const enoughCols = selectedInOrder.length >= (isChange ? 2 : 1);
+  const canSubmit = enoughCols && name.trim().length > 0;
 
-  const canSubmit =
-    selectedInOrder.length >= (calcType === "change" || calcType === "avgchange" ? 2 : 1);
+  const inputCls =
+    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 
   return (
     <div
@@ -57,7 +62,7 @@ export function CalcDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-          New calculated field
+          {initial ? "Edit calculated field" : "New calculated field"}
         </h2>
 
         <label className="mt-4 flex flex-col gap-1.5 text-sm">
@@ -65,7 +70,7 @@ export function CalcDialog({
           <select
             value={calcType}
             onChange={(e) => setCalcType(e.target.value as CalcType)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className={inputCls}
           >
             {(Object.keys(CALC_LABELS) as CalcType[]).map((t) => (
               <option key={t} value={t}>
@@ -76,16 +81,38 @@ export function CalcDialog({
         </label>
 
         <label className="mt-4 flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-200">
-            Name <span className="text-slate-400">(optional)</span>
-          </span>
+          <span className="font-medium text-slate-700 dark:text-slate-200">Name</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={CALC_LABELS[calcType].split(" (")[0]}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className={inputCls}
           />
         </label>
+
+        {isChange && (
+          <div className="mt-4 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Show as</span>
+            <div className="mt-1 flex gap-4">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={!asPercent}
+                  onChange={() => setAsPercent(false)}
+                />
+                Raw number
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={asPercent}
+                  onChange={() => setAsPercent(true)}
+                />
+                Percentage change
+              </label>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 text-sm">
           <p className="mb-2 font-medium text-slate-700 dark:text-slate-200">
@@ -93,10 +120,10 @@ export function CalcDialog({
           </p>
           {sources.length === 0 ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-              Add some data columns first, then create a calculated field from them.
+              Add some data columns first, then build a calculated field from them.
             </p>
           ) : (
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+            <div className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
               {sources.map((s) => (
                 <div key={s.id} className="flex items-center gap-2">
                   <label className="flex flex-1 items-center gap-2">
@@ -124,7 +151,7 @@ export function CalcDialog({
               ))}
             </div>
           )}
-          {(calcType === "change" || calcType === "avgchange") && (
+          {isChange && (
             <p className="mt-1 text-xs text-slate-400">
               Evaluated left → right in the current column order.
             </p>
@@ -143,14 +170,15 @@ export function CalcDialog({
             onClick={() =>
               onConfirm({
                 calcType,
-                name: defaultName(),
+                name: name.trim(),
                 sourceIds: selectedInOrder,
                 weights,
+                asPercent: isChange ? asPercent : false,
               })
             }
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
-            Add field
+            {initial ? "Save" : "Add field"}
           </button>
         </div>
       </div>

@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   ]);
 
   const stats = [
-    { label: "Metrics (data dictionary)", value: metricCount },
+    { label: "Metrics in Data Dictionary", value: metricCount },
     { label: "Schools & districts", value: entityCount },
     { label: "Data points", value: factCount },
   ];
