@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { entities, entityGroups } from "@/db/schema";
@@ -24,12 +24,18 @@ async function sanitizeEntityIds(raw: number[]): Promise<number[]> {
 
 export type CreateGroupResult =
   | { ok: true; group: GroupLite }
-  | { ok: false; error: string };
+  | { ok: false; error: string }
+  | { ok: false; conflict: { id: number; name: string } };
 
-/** Create a saved group from a set of entity ids. Called from the workshop. */
+/**
+ * Create a saved group from a set of entity ids. If a group with the same name
+ * already exists (and `force` is false), returns a `conflict` so the caller can
+ * offer overwrite-vs-save-new.
+ */
 export async function createGroup(
   name: string,
   entityIds: number[],
+  force = false,
 ): Promise<CreateGroupResult> {
   const user = await requireUser();
 
@@ -39,11 +45,41 @@ export async function createGroup(
   const ids = await sanitizeEntityIds(entityIds);
   if (ids.length === 0) return { ok: false, error: "Select at least one entity." };
 
+  if (!force) {
+    const [existing] = await db
+      .select({ id: entityGroups.id, name: entityGroups.name })
+      .from(entityGroups)
+      .where(
+        and(eq(entityGroups.userId, user.id), sql`lower(${entityGroups.name}) = lower(${parsed.data})`),
+      )
+      .orderBy(desc(entityGroups.updatedAt))
+      .limit(1);
+    if (existing) return { ok: false, conflict: existing };
+  }
+
   const [row] = await db
     .insert(entityGroups)
     .values({ userId: user.id, name: parsed.data, entityIds: ids })
     .returning({ id: entityGroups.id, name: entityGroups.name, entityIds: entityGroups.entityIds });
 
+  revalidatePath("/groups");
+  return { ok: true, group: { id: row.id, name: row.name, entityIds: row.entityIds ?? [] } };
+}
+
+/** Overwrite an existing group's membership (ownership-checked). */
+export async function overwriteGroup(
+  id: number,
+  entityIds: number[],
+): Promise<CreateGroupResult> {
+  const user = await requireUser();
+  const ids = await sanitizeEntityIds(entityIds);
+  if (ids.length === 0) return { ok: false, error: "Select at least one entity." };
+  const [row] = await db
+    .update(entityGroups)
+    .set({ entityIds: ids, updatedAt: new Date() })
+    .where(and(eq(entityGroups.id, id), eq(entityGroups.userId, user.id)))
+    .returning({ id: entityGroups.id, name: entityGroups.name, entityIds: entityGroups.entityIds });
+  if (!row) return { ok: false, error: "Group not found." };
   revalidatePath("/groups");
   return { ok: true, group: { id: row.id, name: row.name, entityIds: row.entityIds ?? [] } };
 }

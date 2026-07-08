@@ -14,9 +14,9 @@ import {
 } from "@dnd-kit/core";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
-import { createGroup } from "@/lib/groups/actions";
+import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
-import { createView } from "@/lib/views/actions";
+import { createView, overwriteView } from "@/lib/views/actions";
 import { getColumnValues, getMetricSubgroups, searchMetrics } from "@/lib/workshop/actions";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
 import type { MetricLite } from "@/lib/workshop/types";
@@ -258,6 +258,8 @@ export function Workshop({
   const [viewDialog, setViewDialog] = useState(false);
   const [viewName, setViewName] = useState(initialViewName);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [viewConflict, setViewConflict] = useState<{ name: string; id: number; state: SavedViewState } | null>(null);
+  const [groupConflict, setGroupConflict] = useState<{ name: string; id: number; ids: number[] } | null>(null);
 
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -646,14 +648,37 @@ export function Workshop({
     const g = groups.find((x) => String(x.id) === value);
     if (g) setHidden(complement(new Set(g.entityIds)));
   }
+  function addGroupToList(g: GroupLite) {
+    setGroups((gs) =>
+      [...gs.filter((x) => x.id !== g.id), g].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  }
   async function handleCreateGroup(name: string) {
-    const res = await createGroup(name, [...selected]);
+    const ids = [...selected];
+    const res = await createGroup(name, ids);
     if (res.ok) {
-      setGroups((gs) => [...gs, res.group].sort((a, b) => a.name.localeCompare(b.name)));
+      addGroupToList(res.group);
       setGroupDialog(false);
       setSelected(new Set());
+      return { ok: true };
+    }
+    if ("conflict" in res) {
+      setGroupConflict({ name, id: res.conflict.id, ids });
+      setGroupDialog(false);
+      return { ok: true }; // resolved via the overwrite/save-new prompt
     }
     return res;
+  }
+  async function resolveGroupConflict(mode: "overwrite" | "new") {
+    if (!groupConflict) return;
+    const { name, id, ids } = groupConflict;
+    const res =
+      mode === "overwrite" ? await overwriteGroup(id, ids) : await createGroup(name, ids, true);
+    if (res.ok) {
+      addGroupToList(res.group);
+      setSelected(new Set());
+    }
+    setGroupConflict(null);
   }
 
   // ── saved views ──
@@ -752,12 +777,27 @@ export function Workshop({
     else exportPdf(header, data);
   }
   async function handleSaveView(name: string) {
-    const res = await createView(name, captureState());
+    const state = captureState();
+    const res = await createView(name, state);
     if (res.ok) {
       setViewName(res.view.name);
       setViewDialog(false);
+      return { ok: true };
+    }
+    if ("conflict" in res) {
+      setViewConflict({ name, id: res.conflict.id, state });
+      setViewDialog(false);
+      return { ok: true }; // resolved via the overwrite/save-new prompt
     }
     return res;
+  }
+  async function resolveViewConflict(mode: "overwrite" | "new") {
+    if (!viewConflict) return;
+    const { name, id, state } = viewConflict;
+    const res =
+      mode === "overwrite" ? await overwriteView(id, state) : await createView(name, state, true);
+    if (res.ok) setViewName(res.view.name);
+    setViewConflict(null);
   }
 
   // Restore a saved view once, when opened via /workshop?view=<id>.
@@ -1331,7 +1371,75 @@ export function Workshop({
           onClose={() => setConfirmClear(false)}
         />
       )}
+
+      {viewConflict && (
+        <OverwriteDialog
+          kind="view"
+          name={viewConflict.name}
+          onOverwrite={() => resolveViewConflict("overwrite")}
+          onSaveNew={() => resolveViewConflict("new")}
+          onClose={() => setViewConflict(null)}
+        />
+      )}
+      {groupConflict && (
+        <OverwriteDialog
+          kind="group"
+          name={groupConflict.name}
+          onOverwrite={() => resolveGroupConflict("overwrite")}
+          onSaveNew={() => resolveGroupConflict("new")}
+          onClose={() => setGroupConflict(null)}
+        />
+      )}
     </>
+  );
+}
+
+// ── overwrite-or-save-new prompt (name collision) ──
+function OverwriteDialog({
+  kind,
+  name,
+  onOverwrite,
+  onSaveNew,
+  onClose,
+}: {
+  kind: "view" | "group";
+  name: string;
+  onOverwrite: () => void;
+  onSaveNew: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Name already used</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          A {kind} named “{name}” already exists. Overwrite it, or save this as a new {kind}?
+        </p>
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSaveNew}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Save as new
+          </button>
+          <button
+            onClick={onOverwrite}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+          >
+            Overwrite
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

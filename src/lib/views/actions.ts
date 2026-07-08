@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { savedViews } from "@/db/schema";
@@ -12,12 +12,18 @@ const nameSchema = z.string().trim().min(1, "Enter a name.").max(255);
 
 export type CreateViewResult =
   | { ok: true; view: { id: number; name: string } }
-  | { ok: false; error: string };
+  | { ok: false; error: string }
+  | { ok: false; conflict: { id: number; name: string } };
 
-/** Save the current workshop state as a named view. Called from the workshop. */
+/**
+ * Save the current workshop state as a named view. If a view with the same name
+ * already exists (and `force` is false), returns a `conflict` so the caller can
+ * offer overwrite-vs-save-new.
+ */
 export async function createView(
   name: string,
   state: SavedViewState,
+  force = false,
 ): Promise<CreateViewResult> {
   const user = await requireUser();
 
@@ -27,11 +33,40 @@ export async function createView(
     return { ok: false, error: "Nothing to save yet." };
   }
 
+  if (!force) {
+    const [existing] = await db
+      .select({ id: savedViews.id, name: savedViews.name })
+      .from(savedViews)
+      .where(
+        and(eq(savedViews.userId, user.id), sql`lower(${savedViews.name}) = lower(${parsed.data})`),
+      )
+      .orderBy(desc(savedViews.updatedAt))
+      .limit(1);
+    if (existing) return { ok: false, conflict: existing };
+  }
+
   const [row] = await db
     .insert(savedViews)
     .values({ userId: user.id, name: parsed.data, state })
     .returning({ id: savedViews.id, name: savedViews.name });
 
+  revalidatePath("/views");
+  return { ok: true, view: row };
+}
+
+/** Overwrite an existing view's state (ownership-checked). */
+export async function overwriteView(
+  id: number,
+  state: SavedViewState,
+): Promise<CreateViewResult> {
+  const user = await requireUser();
+  if (!state || !Array.isArray(state.columns)) return { ok: false, error: "Nothing to save yet." };
+  const [row] = await db
+    .update(savedViews)
+    .set({ state, updatedAt: new Date() })
+    .where(and(eq(savedViews.id, id), eq(savedViews.userId, user.id)))
+    .returning({ id: savedViews.id, name: savedViews.name });
+  if (!row) return { ok: false, error: "View not found." };
   revalidatePath("/views");
   return { ok: true, view: row };
 }
