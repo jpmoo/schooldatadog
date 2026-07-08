@@ -51,16 +51,55 @@ function toVegaLite(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
       const friendly = typeof d.field === "string" ? labels[d.field] : undefined;
+      // minorStep is our own key (minor gridlines); never pass it to Vega-Lite.
+      const { minorStep: _minor, ...rest } = d;
+      void _minor;
+      const title = (typeof d.title === "string" ? d.title : undefined) ?? friendly;
       return [
         ch,
         {
-          ...d,
-          title: d.title ?? friendly ?? d.field,
+          ...rest,
+          ...(title ? { title } : {}),
           ...(hideLegend && LEGEND_CHANNELS.has(ch) ? { legend: null } : {}),
         },
       ];
     }),
   );
+
+  // Minor gridlines: Vega-Lite has no native minor ticks, so for a plain
+  // quantitative x/y axis we draw evenly-spaced rules from the data extent.
+  const minorLayers: Record<string, unknown>[] = [];
+  if (!faceted) {
+    for (const ax of ["x", "y"] as const) {
+      const d = (enc[ax] ?? {}) as Record<string, unknown>;
+      const step = typeof d.minorStep === "number" ? d.minorStep : 0;
+      const field = d.field;
+      if (
+        step > 0 &&
+        typeof field === "string" &&
+        d.type === "quantitative" &&
+        !("bin" in d) &&
+        !("aggregate" in d)
+      ) {
+        const nums = rows.map((r) => r[field]).filter((v): v is number => typeof v === "number");
+        if (nums.length) {
+          const lo = Math.min(...nums, 0);
+          const hi = Math.max(...nums, 0);
+          const start = Math.floor(lo / step) * step;
+          const stop = Math.ceil(hi / step) * step + step / 2;
+          minorLayers.push({
+            data: { sequence: { start, stop, step, as: "_g" } },
+            mark: { type: "rule", stroke: "#cbd5e1", strokeWidth: 0.4, opacity: 0.6 },
+            encoding: { [ax]: { field: "_g", type: "quantitative", axis: null } },
+          });
+        }
+      }
+    }
+  }
+
+  const base = { mark: spec.mark ?? "bar", encoding };
+  const chartLayer = minorLayers.length ? { layer: [...minorLayers, base] } : base;
+
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",
     // Faceted charts size to their content, so let them use their natural size
@@ -71,8 +110,7 @@ function toVegaLite(
     ...(spec.title ? { title: spec.title } : {}),
     data: { values: rows },
     ...(spec.transform ? { transform: spec.transform } : {}),
-    mark: spec.mark ?? "bar",
-    encoding,
+    ...chartLayer,
   };
 }
 

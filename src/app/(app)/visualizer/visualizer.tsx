@@ -19,6 +19,7 @@ import { VegaChart } from "@/lib/viz/vega-chart";
 // Friendly, plain-language chart controls (Vega-Lite marks/channels underneath).
 const MARK_OPTIONS = [
   { value: "bar", label: "Bars" },
+  { value: "histogram", label: "Histogram" },
   { value: "line", label: "Line" },
   { value: "point", label: "Dots (scatter)" },
   { value: "area", label: "Area" },
@@ -504,6 +505,63 @@ export function Visualizer({
     const a = cur.axis as Record<string, unknown> | undefined;
     return typeof a?.tickMinStep === "number" ? a.tickMinStep : "";
   };
+  // Minor gridline spacing (our own key; rendered by VegaChart).
+  const setAxisMinor = (ch: string, step: number) =>
+    setSpec((s) => {
+      const cur = s.encoding?.[ch] as Record<string, unknown> | undefined;
+      if (!cur) return s;
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      const next: Record<string, unknown> = { ...cur };
+      if (step > 0) next.minorStep = step;
+      else delete next.minorStep;
+      enc[ch] = next;
+      return { ...s, encoding: enc as ChartSpec["encoding"] };
+    });
+  const axisMinorOf = (ch: string) => {
+    const v = (spec.encoding?.[ch] as Record<string, unknown> | undefined)?.minorStep;
+    return typeof v === "number" ? v : "";
+  };
+
+  // "Chart type" is the mark, plus a "histogram" preset (binned x + count y).
+  const chartType = (() => {
+    const x = spec.encoding?.x as Record<string, unknown> | undefined;
+    const y = spec.encoding?.y as Record<string, unknown> | undefined;
+    if (spec.mark === "bar" && x?.bin && y?.aggregate === "count") return "histogram";
+    return typeof spec.mark === "string" ? spec.mark : "bar";
+  })();
+  function setChartType(value: string) {
+    setSpec((s) => {
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      if (value === "histogram") {
+        const xf = (enc.x?.field as string) || s.data.fields[0]?.id || s.data.calc[0]?.id;
+        if (xf) enc.x = { ...(enc.x ?? {}), field: xf, type: "quantitative", bin: true };
+        enc.y = { aggregate: "count", type: "quantitative" };
+        return { ...s, mark: "bar", encoding: enc as ChartSpec["encoding"] };
+      }
+      // Leaving histogram: undo the binned-x / count-y scaffolding.
+      const wasHist = enc.x?.bin && enc.y?.aggregate === "count";
+      if (wasHist) {
+        if (enc.x) {
+          const x = { ...enc.x };
+          delete x.bin;
+          enc.x = x;
+        }
+        delete enc.y;
+      }
+      return { ...s, mark: value, encoding: enc as ChartSpec["encoding"] };
+    });
+  }
+
+  // Highlight the user's own district by colouring on the homeDistrict column.
+  const highlightOn = (spec.encoding?.color as Record<string, unknown> | undefined)?.field === "homeDistrict";
+  function setHighlight(on: boolean) {
+    setSpec((s) => {
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      if (on) enc.color = { field: "homeDistrict", type: "nominal" };
+      else if ((enc.color as Record<string, unknown> | undefined)?.field === "homeDistrict") delete enc.color;
+      return { ...s, encoding: enc as ChartSpec["encoding"] };
+    });
+  }
 
   function applyJson() {
     try {
@@ -754,7 +812,7 @@ export function Visualizer({
         {/* RIGHT — encoding */}
         <aside className="flex w-[22%] min-w-[220px] flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Chart type</p>
-          <select value={typeof spec.mark === "string" ? spec.mark : "bar"} onChange={(e) => setSpec((s) => ({ ...s, mark: e.target.value }))} className={input}>
+          <select value={chartType} onChange={(e) => setChartType(e.target.value)} className={input}>
             {MARK_OPTIONS.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
           </select>
 
@@ -814,39 +872,47 @@ export function Visualizer({
             />
             <span className="text-slate-600 dark:text-slate-300">Show legend</span>
           </label>
-          {(spec.encoding?.x?.field || spec.encoding?.y?.field) && (
-            <div className="flex gap-2">
-              {spec.encoding?.x?.field && (
-                <label className="flex flex-1 flex-col gap-1 text-sm">
-                  <span className="text-slate-600 dark:text-slate-300">X step</span>
+          {homeDistrictName && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={highlightOn} onChange={(e) => setHighlight(e.target.checked)} />
+              <span className="text-slate-600 dark:text-slate-300">
+                Highlight my district{" "}
+                <span className="text-slate-400">({homeDistrictName})</span>
+              </span>
+            </label>
+          )}
+          {(["x", "y"] as const).map((ax) =>
+            spec.encoding?.[ax]?.field || spec.encoding?.[ax]?.aggregate ? (
+              <div key={ax} className="flex items-end gap-2">
+                <span className="mb-2 w-4 text-sm font-medium uppercase text-slate-500 dark:text-slate-400">{ax}</span>
+                <label className="flex flex-1 flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  Major
                   <input
                     type="number"
                     min={0}
                     step="any"
-                    value={axisStepOf("x")}
-                    onChange={(e) => setAxisStep("x", Number(e.target.value))}
+                    value={axisStepOf(ax)}
+                    onChange={(e) => setAxisStep(ax, Number(e.target.value))}
                     placeholder="auto"
                     className={`${input} w-full`}
-                    title="Tick increment on the bottom axis"
+                    title="Spacing of labelled ticks / gridlines (bin width on a histogram)"
                   />
                 </label>
-              )}
-              {spec.encoding?.y?.field && (
-                <label className="flex flex-1 flex-col gap-1 text-sm">
-                  <span className="text-slate-600 dark:text-slate-300">Y step</span>
+                <label className="flex flex-1 flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  Minor
                   <input
                     type="number"
                     min={0}
                     step="any"
-                    value={axisStepOf("y")}
-                    onChange={(e) => setAxisStep("y", Number(e.target.value))}
-                    placeholder="auto"
+                    value={axisMinorOf(ax)}
+                    onChange={(e) => setAxisMinor(ax, Number(e.target.value))}
+                    placeholder="none"
                     className={`${input} w-full`}
-                    title="Tick increment on the left axis"
+                    title="Spacing of finer, unlabelled gridlines"
                   />
                 </label>
-              )}
-            </div>
+              </div>
+            ) : null,
           )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Palette</span>
