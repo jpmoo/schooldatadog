@@ -93,6 +93,7 @@ Calculated fields (the "calc" array) derive new columns from the data columns:
 - "rank" — weighted percentile ranking of the sources (use "weights", a per-source 0-100 map that sums to 100).
 - "similarity" — weighted similarity of each row to one reference district (needs "refDistrict" plus "weights").
 Each calc references data columns by their "id" handle, so give the columns you need an "id".
+When the user asks for a similarity, ranking, average, or change field, you MUST actually add it to the "calc" array — do not just describe it in "reply". For a similarity field, also include every data column it compares in "columns" and reference them in the calc's "sources".
 
 Rules:
 - "columns" REPLACES all columns (data + calc). List every data column you want, left to right, each a metric code + year + subgroup + optional "id". Add "calc" fields after.

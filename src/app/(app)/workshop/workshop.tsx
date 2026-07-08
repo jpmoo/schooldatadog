@@ -320,9 +320,13 @@ export function Workshop({
     if (!Array.isArray(s.columns)) return;
 
     const stamp = Math.round(performance.now());
-    // Build data columns and map each AI "id" handle to the real column id.
+    // Build data columns and map every way the AI might reference one (explicit
+    // id, positional c1.., 0.., or the metric code) to the real column id.
     const dataCols: DataColumn[] = [];
     const handleToId = new Map<string, string>();
+    const register = (h: string, id: string) => {
+      if (h && !handleToId.has(h)) handleToId.set(h, id);
+    };
     (s.columns as Record<string, unknown>[]).forEach((c, i) => {
       const m = metricByCode.get(String(c.metric));
       if (!m) return;
@@ -330,7 +334,10 @@ export function Workshop({
       const sg = typeof c.subgroup === "string" ? c.subgroup : ALL_STUDENTS;
       const id = `data-${m.code}-${yr}-ai${stamp}-${i}`;
       dataCols.push({ id, kind: "data", metric: m, year: yr, subgroup: sg, values: {} });
-      if (typeof c.id === "string") handleToId.set(c.id, id);
+      if (typeof c.id === "string") register(c.id, id);
+      register(`c${dataCols.length}`, id); // positional handle (matches what we send the AI)
+      register(String(i), id);
+      register(m.code, id);
     });
 
     // Build calculated columns, translating handles to real source ids.
@@ -340,10 +347,13 @@ export function Workshop({
       (s.calc as Record<string, unknown>[]).forEach((c, i) => {
         const type = String(c.type ?? "") as CalcType;
         if (!CALC_TYPES.has(type)) return;
-        const sourceIds = (Array.isArray(c.sources) ? (c.sources as unknown[]) : [])
+        let sourceIds = (Array.isArray(c.sources) ? (c.sources as unknown[]) : [])
           .map((h) => handleToId.get(String(h)))
           .filter((x): x is string => !!x);
+        // If the model's handles didn't resolve, fall back to all data columns.
+        if (sourceIds.length === 0) sourceIds = dataCols.map((d) => d.id);
         if (sourceIds.length === 0) return;
+
         const weights: Record<string, number> = {};
         if (c.weights && typeof c.weights === "object") {
           for (const [h, w] of Object.entries(c.weights as Record<string, unknown>)) {
@@ -351,8 +361,17 @@ export function Workshop({
             if (gid && typeof w === "number") weights[gid] = w;
           }
         }
+        // Rank / similarity need weights — default to equal (summing to 100).
+        if ((type === "rank" || type === "similarity") && Object.keys(weights).length === 0) {
+          const base = Math.floor(100 / sourceIds.length);
+          sourceIds.forEach((sid) => (weights[sid] = base));
+          weights[sourceIds[0]] += 100 - base * sourceIds.length;
+        }
+
         const refName = typeof c.refDistrict === "string" ? c.refDistrict.toLowerCase() : "";
-        const refEntityId = refName ? (entities.find((e) => e.name.toLowerCase() === refName)?.id ?? null) : null;
+        const namedRef = refName ? (entities.find((e) => e.name.toLowerCase() === refName)?.id ?? null) : null;
+        // Similarity needs a reference entity; default to the user's home district.
+        const refEntityId = type === "similarity" ? (namedRef ?? homeDistrictId) : null;
         calcCols.push({
           id: `calc-ai${stamp}-${i}`,
           kind: "calc",
