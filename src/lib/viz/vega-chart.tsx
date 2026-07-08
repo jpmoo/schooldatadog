@@ -102,18 +102,21 @@ function toVegaLite(
         | Record<string, unknown>
         | undefined;
       if (meta) {
-        if (meta.dMin !== undefined || meta.dMax !== undefined) {
+        // Domain — ignore an inverted (min ≥ max) range, which Vega rejects.
+        const inverted = meta.dMin !== undefined && meta.dMax !== undefined && meta.dMin >= meta.dMax;
+        if (!inverted && (meta.dMin !== undefined || meta.dMax !== undefined)) {
           scale = scale ?? {};
           if (meta.dMin !== undefined) scale.domainMin = meta.dMin;
           if (meta.dMax !== undefined) scale.domainMax = meta.dMax;
         }
+        // Ticks — exact positions for a sane count; fall back to a tick count for
+        // very fine intervals so we never flood the axis with thousands of ticks.
         if (meta.interval > 0 && meta.lo !== undefined && meta.hi !== undefined && meta.hi > meta.lo) {
-          const vals = enumerateTicks(meta.lo, meta.hi, meta.interval);
-          if (vals.length) {
-            axis = axis ?? {};
-            axis.values = vals;
-            axis.grid = true;
-          }
+          const n = (meta.hi - meta.lo) / meta.interval;
+          axis = axis ?? {};
+          if (n <= 60) axis.values = enumerateTicks(meta.lo, meta.hi, meta.interval);
+          else axis.tickCount = Math.min(Math.round(n), 100);
+          axis.grid = true;
         }
       }
       return [

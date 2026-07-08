@@ -527,8 +527,10 @@ export function Visualizer({
       return { ...s, encoding: enc as ChartSpec["encoding"] };
     });
   // A channel holds a sortable category when it has a field that isn't a
-  // continuous measure (quantitative / binned / aggregated).
+  // continuous measure (quantitative / binned / aggregated). Sorting is only
+  // offered on the axes (x/y), not on colour / size / grouping channels.
   const isCategoricalChannel = (ch: string) => {
+    if (ch !== "x" && ch !== "y") return false;
     const c = spec.encoding?.[ch] as Record<string, unknown> | undefined;
     return !!c?.field && c.type !== "quantitative" && !("bin" in c) && !("aggregate" in c);
   };
