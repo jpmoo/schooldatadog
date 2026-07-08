@@ -10,7 +10,7 @@ import type { CellValue, MetricLite } from "./types";
 
 const RESULT_LIMIT = 60;
 // Only genuinely-close semantic neighbours ride along after the keyword hits.
-const SEMANTIC_MIN = 0.8;
+const SEMANTIC_MIN = 0.6;
 
 function cosine(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;

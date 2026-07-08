@@ -63,6 +63,11 @@ def melt_specs(
             sy = year_transform(raw_year) if year_transform else str(raw_year).strip()
             if not sy:
                 continue  # unparseable year -> skip row
+            # Don't ingest snapshots newer than the dataset year being processed —
+            # NYSED history files sometimes carry a future, partial year (e.g. a
+            # fall-2025 row in the 2024-25 file). "YYYY-YY" sorts lexicographically.
+            if school_year and sy > school_year:
+                continue
         else:
             sy = school_year
 
@@ -136,6 +141,9 @@ def melt_rows(
         else:
             sy = school_year
         if not sy:
+            continue
+        # Skip snapshots newer than the dataset year being processed (see melt_specs).
+        if sy_series is not None and school_year and sy > school_year:
             continue
 
         subgroup = canon_subgroup(sub_series.iat[i]) if sub_series is not None else ALL_STUDENTS

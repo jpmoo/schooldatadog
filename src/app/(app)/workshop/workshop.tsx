@@ -134,23 +134,6 @@ function ColumnHeader({
   );
 }
 
-function RemoveZone({ active }: { active: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id: "remove" });
-  if (!active) return null;
-  return (
-    <div
-      ref={setNodeRef}
-      className={`flex h-9 items-center justify-center rounded-lg border-2 border-dashed text-xs font-medium ${
-        isOver
-          ? "border-red-500 bg-red-50 text-red-600 dark:bg-red-950/40"
-          : "border-slate-300 text-slate-400 dark:border-slate-700"
-      }`}
-    >
-      Drop here to remove column
-    </div>
-  );
-}
-
 function SheetDrop({
   children,
   scrollRef,
@@ -226,6 +209,7 @@ export function Workshop({
   const [dragging, setDragging] = useState<{ kind: string; label: string } | null>(null);
   const [openCats, setOpenCats] = useState<Set<string>>(new Set());
   const [subgroupCol, setSubgroupCol] = useState<DataColumn | null>(null);
+  const [paneHidden, setPaneHidden] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -630,16 +614,13 @@ export function Workshop({
     const a = String(active.id);
     const o = String(over.id);
     if (a.startsWith("metric:")) {
-      if (o !== "remove") {
-        const m = active.data.current?.metric as MetricLite | undefined;
-        if (m) void addDataColumn(m, year);
-      }
+      const m = active.data.current?.metric as MetricLite | undefined;
+      if (m) void addDataColumn(m, year);
     } else if (a === "calc-source") {
-      if (o !== "remove") setCalcDialog({ editId: null });
+      setCalcDialog({ editId: null });
     } else if (a.startsWith("col:")) {
       const colId = a.slice(4);
-      if (o === "remove") removeColumn(colId);
-      else if (o.startsWith("drop-")) reorder(colId, o.slice(5));
+      if (o.startsWith("drop-")) reorder(colId, o.slice(5)); // reorder only; ✕ removes
     }
   }
 
@@ -674,7 +655,8 @@ export function Workshop({
     );
   }
 
-  const btn = "rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+  // Fixed height keeps buttons and selects the same size in the filter row.
+  const btn = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 
   return (
     <>
@@ -685,7 +667,8 @@ export function Workshop({
       onDragCancel={() => setDragging(null)}
     >
       <div className="flex h-[calc(100vh-8rem)] gap-3" onClick={() => ctx && setCtx(null)}>
-        {/* LEFT 30% */}
+        {/* LEFT 30% — hideable */}
+        {!paneHidden && (
         <aside className="flex w-[30%] min-w-[260px] flex-col gap-3 overflow-hidden">
           <CalcSource />
           <div className="flex items-center gap-2">
@@ -759,10 +742,18 @@ export function Workshop({
             )}
           </div>
         </aside>
+        )}
 
-        {/* RIGHT 70% */}
+        {/* RIGHT 70% (full width when the left pane is hidden) */}
         <section className="flex flex-1 flex-col gap-2 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+            <button
+              onClick={() => setPaneHidden((v) => !v)}
+              className={btn}
+              title={paneHidden ? "Show metrics panel" : "Hide metrics panel (full-width sheet)"}
+            >
+              {paneHidden ? "⟩ Panel" : "⟨ Panel"}
+            </button>
             <select value={viewMode} onChange={(e) => setViewMode(e.target.value as "districts" | "both")} className={btn}>
               <option value="districts">Districts only</option>
               <option value="both">Districts &amp; schools</option>
@@ -792,14 +783,14 @@ export function Workshop({
               ))}
             </select>
             {homeDistrictId != null && (
-              <button onClick={scrollToHome} className="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500">
+              <button onClick={scrollToHome} className="h-9 rounded-lg bg-indigo-600 px-3 font-medium text-white hover:bg-indigo-500">
                 ⌖ My district
               </button>
             )}
             <button
               onClick={() => setViewDialog(true)}
               disabled={columns.length === 0}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="h-9 rounded-lg border border-slate-300 px-3 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               title="Save all filters, sorts & columns as a named view"
             >
               💾 Save view
@@ -836,13 +827,11 @@ export function Workshop({
             </div>
           )}
 
-          <RemoveZone active={dragging?.kind === "col"} />
-
           <SheetDrop scrollRef={scrollRef}>
             {columns.length === 0 ? (
               <div className="flex h-full items-center justify-center p-8 text-center text-sm text-slate-400">
                 Drag metrics here to build columns. Right-click a column or the name header to sort,
-                edit, or collapse; drag headers to reorder or onto the remove bar to delete.
+                edit, or collapse; drag headers to reorder, or use the ✕ to remove a column.
               </div>
             ) : (
               <table className="border-separate border-spacing-0 text-sm">
