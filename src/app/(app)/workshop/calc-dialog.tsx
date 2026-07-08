@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -30,6 +30,40 @@ export type CalcConfig = {
 
 type SourceOption = { id: string; label: string };
 type EntityOption = { id: number; name: string };
+
+const clampPct = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
+
+/**
+ * Split `total` into `n` whole numbers as evenly as possible (largest-remainder
+ * method): every part is floor(total/n), and the leftover units are handed out
+ * one each to the first few — so the parts always sum to exactly `total`.
+ */
+function evenSplit(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor(total / n);
+  const rem = total - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
+}
+
+/**
+ * Distribute `total` across `n` parts in proportion to `weights`, rounded to
+ * whole numbers that sum to exactly `total` (largest-remainder rounding). Falls
+ * back to an even split when the weights carry no signal.
+ */
+function proportionalSplit(total: number, weights: number[]): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return evenSplit(total, n);
+  const raw = weights.map((w) => (total * w) / sum);
+  const out = raw.map(Math.floor);
+  let rem = total - out.reduce((a, b) => a + b, 0);
+  const byFrac = raw
+    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < rem; k++) out[byFrac[k % n].i]++;
+  return out;
+}
 
 function SortableSource({
   s,
@@ -65,15 +99,19 @@ function SortableSource({
       </button>
       <span className="flex-1 truncate text-slate-700 dark:text-slate-200">{s.label}</span>
       {showWeight && (
-        <input
-          type="number"
-          min={0}
-          step="0.5"
-          value={weight}
-          onChange={(e) => onWeight(Number(e.target.value))}
-          className="w-16 rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          title="Weight"
-        />
+        <span className="flex items-center gap-0.5">
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={weight}
+            onChange={(e) => onWeight(Number(e.target.value))}
+            className="w-14 rounded border border-slate-300 px-2 py-1 text-right text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            title="Weight (%)"
+          />
+          <span className="text-xs text-slate-400">%</span>
+        </span>
       )}
       <button onClick={onRemove} className="text-slate-300 hover:text-red-500" title="Remove">
         ✕
@@ -126,6 +164,46 @@ export function CalcDialog({
       return next;
     });
 
+  const isSimilarity = calcType === "similarity";
+  const showWeight = calcType === "rank" || isSimilarity;
+
+  // Keep weights as whole-number percentages that always total 100. Re-equalize
+  // whenever the set of selected columns changes (or we switch to a weighted
+  // type); leave them alone once valid so manual edits stick.
+  const idsKey = selectedInOrder.map((s) => s.id).join(",");
+  useEffect(() => {
+    if (!showWeight) return;
+    const ids = selectedInOrder.map((s) => s.id);
+    setWeights((prev) => {
+      const covered = ids.every((id) => typeof prev[id] === "number");
+      const sum = ids.reduce((a, id) => a + (prev[id] ?? 0), 0);
+      if (ids.length > 0 && covered && sum === 100) return prev;
+      const split = evenSplit(100, ids.length);
+      const next: Record<string, number> = {};
+      ids.forEach((id, i) => (next[id] = split[i]));
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showWeight, idsKey]);
+
+  // Set one column's weight and rebalance the rest so the total stays 100%.
+  function setWeight(id: string, value: number) {
+    const ids = selectedInOrder.map((s) => s.id);
+    const others = ids.filter((x) => x !== id);
+    if (others.length === 0) {
+      setWeights({ [id]: 100 });
+      return;
+    }
+    const v = clampPct(value);
+    const dist = proportionalSplit(
+      100 - v,
+      others.map((x) => weights[x] ?? 0),
+    );
+    const next: Record<string, number> = { ...weights, [id]: v };
+    others.forEach((x, i) => (next[x] = dist[i]));
+    setWeights(next);
+  }
+
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -137,8 +215,6 @@ export function CalcDialog({
   }
 
   const isChange = calcType === "change" || calcType === "avgchange";
-  const isSimilarity = calcType === "similarity";
-  const showWeight = calcType === "rank" || isSimilarity;
   const enoughCols = selectedInOrder.length >= (isChange ? 2 : 1);
   const canSubmit =
     enoughCols && name.trim().length > 0 && (!isSimilarity || refEntityId != null);
@@ -217,7 +293,7 @@ export function CalcDialog({
 
         <div className="mt-4 text-sm">
           <p className="mb-2 font-medium text-slate-700 dark:text-slate-200">
-            Columns {showWeight && <span className="text-slate-400">(and weights)</span>}
+            Columns {showWeight && <span className="text-slate-400">(weights total 100%)</span>}
           </p>
           {sources.length === 0 ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
@@ -242,14 +318,21 @@ export function CalcDialog({
                           key={s.id}
                           s={s}
                           showWeight={showWeight}
-                          weight={weights[s.id] ?? 1}
-                          onWeight={(v) => setWeights((w) => ({ ...w, [s.id]: v }))}
+                          weight={weights[s.id] ?? 0}
+                          onWeight={(v) => setWeight(s.id, v)}
                           onRemove={() => toggle(s.id, false)}
                         />
                       ))}
                     </div>
                   </SortableContext>
                 </DndContext>
+              )}
+
+              {showWeight && selectedInOrder.length > 0 && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Weights are whole-percent shares — editing one rebalances the others to keep the
+                  total at 100%.
+                </p>
               )}
 
               {isChange && (
