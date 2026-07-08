@@ -62,12 +62,17 @@ function AccountModal({ user, onClose }: { user: AccountUser; onClose: () => voi
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
+          <Icon name="user" className="h-5 w-5 text-indigo-500" />
+          Account
+        </h2>
 
         <dl className="mt-4 space-y-2 text-sm">
           {user.name && (
             <div className="flex justify-between gap-4">
-              <dt className="text-slate-500 dark:text-slate-400">Name</dt>
+              <dt className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                <Icon name="user" className="h-4 w-4" /> Name
+              </dt>
               <dd className="font-medium text-slate-800 dark:text-slate-100">{user.name}</dd>
             </div>
           )}
@@ -80,7 +85,9 @@ function AccountModal({ user, onClose }: { user: AccountUser; onClose: () => voi
             <dd className="font-medium capitalize text-slate-800 dark:text-slate-100">{user.role}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-slate-500 dark:text-slate-400">Home district</dt>
+            <dt className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+              <Icon name="myDistrictSchools" className="h-4 w-4" /> Home district
+            </dt>
             <dd className="font-medium text-slate-800 dark:text-slate-100">
               {user.homeDistrict || <span className="font-normal text-slate-400">Not set (an admin can set this)</span>}
             </dd>
@@ -123,15 +130,17 @@ function AccountModal({ user, onClose }: { user: AccountUser; onClose: () => voi
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
+            <Icon name="no" className="h-4 w-4" />
             Close
           </button>
           <button
             onClick={submit}
             disabled={saving || !current || !next || !confirm}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
+            <Icon name="saveViewOrGroup" className="h-4 w-4" />
             {saving ? "Updating…" : "Update password"}
           </button>
         </div>

@@ -608,17 +608,31 @@ export function Visualizer({
     });
   }
 
-  // Highlight the user's own district WITHOUT touching the colour scheme: either
-  // fade everyone else (opacity) or draw a bold outline (stroke) on their marks.
+  // Highlight the user's own district. "fade"/"outline" don't touch the colour
+  // scheme; "color" recolours just their marks to a chosen colour (via a colour
+  // condition that falls back to any existing colour-by for everyone else).
   const HL_TEST = "datum.homeDistrict === 'My district'";
+  const DEFAULT_HL_COLOR = "#f59e0b";
   const hlConds = (k: string) => {
     const c = (spec.encoding?.[k] as Record<string, unknown> | undefined)?.condition as
       | Record<string, unknown>
       | undefined;
     return typeof c?.test === "string" && c.test.includes("homeDistrict");
   };
-  const highlightMode = hlConds("opacity") ? "fade" : hlConds("stroke") ? "outline" : "none";
-  function setHighlightMode(mode: string) {
+  const highlightMode = hlConds("opacity")
+    ? "fade"
+    : hlConds("stroke")
+      ? "outline"
+      : hlConds("color")
+        ? "color"
+        : "none";
+  const highlightColor = (() => {
+    const c = (spec.encoding?.color as Record<string, unknown> | undefined)?.condition as
+      | Record<string, unknown>
+      | undefined;
+    return typeof c?.value === "string" ? c.value : DEFAULT_HL_COLOR;
+  })();
+  function setHighlightMode(mode: string, color = highlightColor) {
     setSpec((s) => {
       const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
       // Remove any existing home-district highlight channels first.
@@ -628,11 +642,25 @@ export function Visualizer({
           | undefined;
         if (typeof c?.test === "string" && c.test.includes("homeDistrict")) delete enc[k];
       }
+      // Strip a colour highlight back to its underlying colour-by (or nothing).
+      const col = enc.color as Record<string, unknown> | undefined;
+      const colCond = col?.condition as Record<string, unknown> | undefined;
+      if (typeof colCond?.test === "string" && colCond.test.includes("homeDistrict")) {
+        if (typeof col?.field === "string") enc.color = { field: col.field, type: col.type };
+        else delete enc.color;
+      }
+
       if (mode === "fade") {
         enc.opacity = { condition: { test: HL_TEST, value: 1 }, value: 0.3 };
       } else if (mode === "outline") {
         enc.stroke = { condition: { test: HL_TEST, value: "#0f172a" }, value: null };
         enc.strokeWidth = { condition: { test: HL_TEST, value: 2.5 }, value: 0 };
+      } else if (mode === "color") {
+        const base = enc.color as Record<string, unknown> | undefined;
+        enc.color =
+          typeof base?.field === "string"
+            ? { condition: { test: HL_TEST, value: color }, field: base.field, type: base.type }
+            : { condition: { test: HL_TEST, value: color }, value: "#cbd5e1" };
       }
       return { ...s, encoding: enc as ChartSpec["encoding"] };
     });
@@ -978,12 +1006,28 @@ export function Visualizer({
           {homeDistrictName && (
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600 dark:text-slate-300">Highlight my district</span>
-              <select value={highlightMode} onChange={(e) => setHighlightMode(e.target.value)} className={input}>
-                <option value="none">None</option>
-                <option value="fade">Fade the others</option>
-                <option value="outline">Outline it</option>
-              </select>
-              <span className="text-[11px] text-slate-400">Emphasises your district without changing the colours.</span>
+              <div className="flex items-center gap-2">
+                <select value={highlightMode} onChange={(e) => setHighlightMode(e.target.value)} className={`${input} flex-1`}>
+                  <option value="none">None</option>
+                  <option value="fade">Fade the others</option>
+                  <option value="outline">Outline it</option>
+                  <option value="color">Recolor it</option>
+                </select>
+                {highlightMode === "color" && (
+                  <input
+                    type="color"
+                    value={highlightColor}
+                    onChange={(e) => setHighlightMode("color", e.target.value)}
+                    className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-950"
+                    title="Highlight colour"
+                  />
+                )}
+              </div>
+              <span className="text-[11px] text-slate-400">
+                {highlightMode === "color"
+                  ? "Recolours just your district to the chosen colour."
+                  : "Emphasises your district without changing the colours."}
+              </span>
             </label>
           )}
           {(["x", "y"] as const).map((ax) =>
