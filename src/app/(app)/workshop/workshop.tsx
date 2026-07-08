@@ -1766,11 +1766,18 @@ function EntityPanel({
 }) {
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
-  const list = entities.filter(
-    (e) =>
-      (!county || e.county === county) &&
-      (!needle || e.name.toLowerCase().includes(needle)),
-  );
+  const list = entities
+    .filter(
+      (e) =>
+        (!county || e.county === county) &&
+        (!needle || e.name.toLowerCase().includes(needle)),
+    )
+    // Shown (selected) entities float to the top, each group alphabetical.
+    .sort((a, b) => {
+      const sa = hidden.has(a.id) ? 1 : 0;
+      const sb = hidden.has(b.id) ? 1 : 0;
+      return sa - sb || a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
   const toggle = (id: number) => {
     const n = new Set(hidden);
     if (n.has(id)) n.delete(id);

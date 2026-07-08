@@ -34,9 +34,17 @@ function themeConfig(theme: ChartSpec["theme"]) {
 
 /** Compile a ChartSpec's encoding layer + resolved rows into a Vega-Lite spec.
  * `labels` maps a field id / built-in to its friendly name so axes and legends
- * read nicely; an explicit channel `title` always wins. */
-function toVegaLite(spec: ChartSpec, rows: Row[], labels: Record<string, string>) {
+ * read nicely; an explicit channel `title` always wins. `width`/`height` are the
+ * pixel size to render at (measured container size × zoom). */
+function toVegaLite(
+  spec: ChartSpec,
+  rows: Row[],
+  labels: Record<string, string>,
+  width: number,
+  height: number,
+) {
   const enc = spec.encoding ?? {};
+  const faceted = "column" in enc || "row" in enc || "facet" in enc;
   const encoding = Object.fromEntries(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
@@ -46,8 +54,9 @@ function toVegaLite(spec: ChartSpec, rows: Row[], labels: Record<string, string>
   );
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-    width: "container",
-    height: 420,
+    // Faceted charts size to their content, so let them use their natural size
+    // (the surrounding container scrolls); everything else fits the box exactly.
+    ...(faceted ? {} : { width, height }),
     autosize: { type: "fit", contains: "padding" },
     background: "transparent",
     ...(spec.title ? { title: spec.title } : {}),
@@ -62,22 +71,43 @@ export function VegaChart({
   spec,
   rows,
   labels = {},
+  zoom = 1,
   onView,
 }: {
   spec: ChartSpec;
   rows: Row[];
   labels?: Record<string, string>;
+  zoom?: number;
   onView?: (view: View | null) => void;
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
   // Keep the latest onView without making it an effect dependency — otherwise a
   // fresh inline callback each render would re-run the embed effect constantly
   // and let overlapping async embeds race (a stale one could win).
   const onViewRef = useRef(onView);
   onViewRef.current = onView;
 
+  // Track the available area so the chart always fits inside its box (and re-fits
+  // when a panel opens/closes or the window resizes).
   useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = Math.floor(el.clientWidth);
+      const h = Math.floor(el.clientHeight);
+      setSize((s) => (Math.abs(s.w - w) > 2 || Math.abs(s.h - h) > 2 ? { w, h } : s));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (size.w < 40 || size.h < 40) return;
     let cancelled = false;
     let finalize: (() => void) | undefined;
     (async () => {
@@ -87,7 +117,10 @@ export function VegaChart({
       try {
         const embed = (await import("vega-embed")).default;
         if (cancelled) return;
-        const res = await embed(el, toVegaLite(spec, rows, labels) as never, {
+        // Fit the measured box (minus a little padding) × zoom.
+        const w = Math.max(80, Math.round((size.w - 8) * zoom));
+        const h = Math.max(80, Math.round((size.h - 8) * zoom));
+        const res = await embed(el, toVegaLite(spec, rows, labels, w, h) as never, {
           renderer: "svg",
           actions: false,
           config: themeConfig(spec.theme) as never,
@@ -110,11 +143,11 @@ export function VegaChart({
       onViewRef.current?.(null);
       finalize?.();
     };
-  }, [spec, rows, labels]);
+  }, [spec, rows, labels, size.w, size.h, zoom]);
 
   return (
-    <div className="w-full">
-      <div ref={ref} className="w-full" />
+    <div ref={wrapRef} className="h-full w-full overflow-auto">
+      <div ref={ref} />
       {error && (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
           {error}

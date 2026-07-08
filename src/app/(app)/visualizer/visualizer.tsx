@@ -16,8 +16,26 @@ import { columnsOf, resolveDataset, type Row } from "@/lib/viz/resolve";
 import { blankSpec, type CalcFieldSpec, type ChartSpec, type EntitySource, type FieldSpec } from "@/lib/viz/spec";
 import { VegaChart } from "@/lib/viz/vega-chart";
 
-const MARKS = ["bar", "line", "point", "area", "tick", "rect"] as const;
-const CHANNELS = ["x", "y", "color", "xOffset", "column", "row", "size"] as const;
+// Friendly, plain-language chart controls (Vega-Lite marks/channels underneath).
+const MARK_OPTIONS = [
+  { value: "bar", label: "Bars" },
+  { value: "line", label: "Line" },
+  { value: "point", label: "Dots (scatter)" },
+  { value: "area", label: "Area" },
+  { value: "tick", label: "Ticks" },
+  { value: "rect", label: "Heatmap" },
+] as const;
+const PRIMARY_CHANNELS = [
+  { ch: "x", label: "Bottom axis", hint: "What runs left-to-right." },
+  { ch: "y", label: "Left axis", hint: "What runs bottom-to-top (usually the number)." },
+  { ch: "color", label: "Color by", hint: "A separate color for each value." },
+] as const;
+const ADVANCED_CHANNELS = [
+  { ch: "xOffset", label: "Side-by-side bars", hint: "Splits bars that share a spot into a cluster (grouped instead of stacked)." },
+  { ch: "column", label: "Small charts across", hint: "One mini-chart per value, left → right." },
+  { ch: "row", label: "Small charts down", hint: "One mini-chart per value, top → bottom." },
+  { ch: "size", label: "Bubble size", hint: "Bigger mark = bigger value. Best with Dots." },
+] as const;
 const STD_SUBGROUPS = [
   "All Students", "Female", "Male",
   "American Indian or Alaska Native", "Asian or Native Hawaiian/Other Pacific Islander",
@@ -63,6 +81,8 @@ export function Visualizer({
   const [showJson, setShowJson] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [jsonErr, setJsonErr] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [advOpen, setAdvOpen] = useState(false);
   const viewRef = useRef<View | null>(null);
   const onChartView = useCallback((v: View | null) => {
     viewRef.current = v;
@@ -133,8 +153,15 @@ export function Visualizer({
           ? entities.filter((e) => e.type === "school")
           : entities;
     const q = entSearch.trim().toLowerCase();
-    return base.filter((e) => !q || e.name.toLowerCase().includes(q));
-  }, [entities, entScope, entSearch]);
+    // Selected entities float to the top, each group alphabetical.
+    return base
+      .filter((e) => !q || e.name.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const pa = idSet.has(a.id) ? 0 : 1;
+        const pb = idSet.has(b.id) ? 0 : 1;
+        return pa - pb || a.name.localeCompare(b.name, undefined, { numeric: true });
+      });
+  }, [entities, entScope, entSearch, idSet]);
 
   async function importView(v: SavedViewMeta) {
     const st = await getViewForImport(v.id);
@@ -625,15 +652,24 @@ export function Visualizer({
         </aside>
 
         {/* CENTER — canvas */}
-        <section className="relative flex min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          {/* spec toggle, top-right of the graph (replaces vega's export menu) */}
-          <button
-            onClick={() => setShowJson((v) => !v)}
-            className={`absolute right-2 top-2 z-10 ${showJson ? iconBtnActive : iconBtn}`}
-            title={showJson ? "Back to chart" : "Edit spec (JSON)"}
-          >
-            <Icon name="spec" />
-          </button>
+        <section className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          {/* zoom + spec toggle, top-right of the graph */}
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
+            {!showJson && canRender && (
+              <div className="flex items-center gap-0.5 rounded-lg border border-slate-300 bg-white/90 dark:border-slate-700 dark:bg-slate-950/90">
+                <button onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))} className="px-2 text-lg leading-none text-slate-600 hover:text-slate-900 dark:text-slate-300" title="Zoom out">−</button>
+                <button onClick={() => setZoom(1)} className="min-w-[2.75rem] py-1.5 text-center text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400" title="Reset zoom">{Math.round(zoom * 100)}%</button>
+                <button onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))} className="px-2 text-lg leading-none text-slate-600 hover:text-slate-900 dark:text-slate-300" title="Zoom in">+</button>
+              </div>
+            )}
+            <button
+              onClick={() => setShowJson((v) => !v)}
+              className={showJson ? iconBtnActive : iconBtn}
+              title={showJson ? "Back to chart" : "Edit spec (JSON)"}
+            >
+              <Icon name="spec" />
+            </button>
+          </div>
           {showJson ? (
             <div className="flex min-h-0 flex-1 flex-col gap-2">
               <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} spellCheck={false} className="min-h-0 flex-1 rounded-lg border border-slate-300 bg-slate-50 p-3 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
@@ -641,8 +677,8 @@ export function Visualizer({
               <button onClick={applyJson} className="flex items-center gap-1.5 self-start rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"><Icon name="apply" className="h-4 w-4" />Apply spec</button>
             </div>
           ) : canRender ? (
-            <div className="rounded-lg bg-white p-2">
-              <VegaChart spec={spec} rows={rows} labels={axisLabels} onView={onChartView} />
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg bg-white">
+              <VegaChart spec={spec} rows={rows} labels={axisLabels} zoom={zoom} onView={onChartView} />
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center text-center text-sm text-slate-400">
@@ -653,22 +689,22 @@ export function Visualizer({
 
         {/* RIGHT — encoding */}
         <aside className="flex w-[22%] min-w-[220px] flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Chart</p>
-          <label className="text-sm text-slate-600 dark:text-slate-300">Mark</label>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Chart type</p>
           <select value={typeof spec.mark === "string" ? spec.mark : "bar"} onChange={(e) => setSpec((s) => ({ ...s, mark: e.target.value }))} className={input}>
-            {MARKS.map((m) => (<option key={m} value={m}>{m}</option>))}
+            {MARK_OPTIONS.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
           </select>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Encoding</p>
-          {CHANNELS.map((ch) => {
+
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fields</p>
+          {PRIMARY_CHANNELS.map(({ ch, label, hint }) => {
             const def = spec.encoding?.[ch];
             return (
               <label key={ch} className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600 dark:text-slate-300">{ch}</span>
+                <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
                 <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
-                  <option value="">—</option>
+                  <option value="">— none —</option>
                   {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
                 </select>
-                {def?.field && (
+                {def?.field ? (
                   <input
                     value={def.title ?? ""}
                     onChange={(e) => setChannelTitle(ch, e.target.value)}
@@ -676,10 +712,35 @@ export function Visualizer({
                     className={`${input} text-xs`}
                     title="Axis / legend label"
                   />
+                ) : (
+                  hint && <span className="text-[11px] text-slate-400">{hint}</span>
                 )}
               </label>
             );
           })}
+
+          <button
+            onClick={() => setAdvOpen((v) => !v)}
+            className="mt-1 flex items-center gap-1.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+          >
+            <span>{advOpen ? "▾" : "▸"}</span>
+            <span>More layout options</span>
+          </button>
+          {advOpen &&
+            ADVANCED_CHANNELS.map(({ ch, label, hint }) => {
+              const def = spec.encoding?.[ch];
+              return (
+                <label key={ch} className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
+                  <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
+                    <option value="">— none —</option>
+                    {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
+                  </select>
+                  <span className="text-[11px] text-slate-400">{hint}</span>
+                </label>
+              );
+            })}
+
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Style</p>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Palette</span>
@@ -703,7 +764,7 @@ export function Visualizer({
         >
           <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">AI</span>
           <span className="flex-1">Ask the AI to build or explain this chart</span>
-          <span className="text-slate-400">{aiOpen ? "▾" : "▸"}</span>
+          <span className="text-slate-400">{aiOpen ? "▼" : "▲"}</span>
         </button>
         {aiOpen && (
           <div className="flex h-56 flex-col border-t border-slate-200 dark:border-slate-800">
