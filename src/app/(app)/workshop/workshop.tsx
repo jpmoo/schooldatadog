@@ -198,6 +198,7 @@ export function Workshop({
   const [groupDialog, setGroupDialog] = useState(false);
   const [viewDialog, setViewDialog] = useState(false);
   const [viewName, setViewName] = useState(initialViewName);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -577,6 +578,21 @@ export function Workshop({
     setColumns(cols);
     void fetchColumnValues(cols.filter((c): c is DataColumn => c.kind === "data"));
   }
+  // Reset the sheet back to a blank slate (columns, filters, sorts, selection).
+  function clearWorkshop() {
+    setColumns([]);
+    setLoading(new Set());
+    setDistrictSort([]);
+    setSchoolSort([]);
+    setHidden(new Set());
+    setCollapsed(new Set());
+    setSelected(new Set());
+    setCounty("");
+    setGroupFilter("");
+    setViewMode("districts");
+    setViewName(null);
+    setConfirmClear(false);
+  }
   async function handleSaveView(name: string) {
     const res = await createView(name, captureState());
     if (res.ok) {
@@ -794,6 +810,14 @@ export function Workshop({
               title="Save all filters, sorts & columns as a named view"
             >
               💾 Save view
+            </button>
+            <button
+              onClick={() => setConfirmClear(true)}
+              disabled={columns.length === 0 && districtSort.length === 0 && schoolSort.length === 0 && hidden.size === 0 && !county && !groupFilter}
+              className="h-9 rounded-lg border border-slate-300 px-3 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              title="Clear all columns, filters, and sorts"
+            >
+              🧹 Clear
             </button>
             <span className="ml-auto text-xs text-slate-400">
               {viewName ? <span className="mr-2 text-indigo-500">“{viewName}”</span> : null}
@@ -1048,7 +1072,58 @@ export function Workshop({
           onClose={() => setSubgroupCol(null)}
         />
       )}
+
+      {confirmClear && (
+        <ConfirmDialog
+          title="Clear the workshop?"
+          body="This removes all columns, calculated fields, filters, and sorts and returns to a blank sheet. Saved views and groups are not affected."
+          confirmLabel="Clear"
+          onConfirm={clearWorkshop}
+          onClose={() => setConfirmClear(false)}
+        />
+      )}
     </>
+  );
+}
+
+// ── confirm dialog ──
+function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{body}</p>
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
