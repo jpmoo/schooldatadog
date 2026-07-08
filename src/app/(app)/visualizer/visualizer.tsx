@@ -314,21 +314,21 @@ export function Visualizer({
           } as FieldSpec;
         })
         .filter((f): f is FieldSpec => f !== null && f.years.length > 0);
-      setSpec((s) => ({
-        ...s,
-        mark: typeof c.mark === "string" ? c.mark : s.mark,
-        encoding: (c.encoding as ChartSpec["encoding"]) ?? s.encoding,
-        title: typeof c.title === "string" ? c.title : s.title,
-        data: { ...s.data, fields, calc: [] },
-      }));
-    } else if (c.encoding || c.mark || typeof c.title === "string") {
-      setSpec((s) => ({
-        ...s,
-        mark: typeof c.mark === "string" ? c.mark : s.mark,
-        encoding: (c.encoding as ChartSpec["encoding"]) ?? s.encoding,
-        title: typeof c.title === "string" ? c.title : s.title,
-      }));
+      setSpec((s) => ({ ...s, ...aiOverrides(c, s), data: { ...s.data, fields, calc: [] } }));
+    } else if (c.encoding || c.mark || typeof c.title === "string" || c.theme || "showLegend" in c) {
+      setSpec((s) => ({ ...s, ...aiOverrides(c, s) }));
     }
+  }
+
+  // Every chart-level setting the AI can drive, so the whole page reflects it.
+  function aiOverrides(c: Record<string, unknown>, s: ChartSpec): Partial<ChartSpec> {
+    return {
+      mark: typeof c.mark === "string" ? c.mark : s.mark,
+      encoding: (c.encoding as ChartSpec["encoding"]) ?? s.encoding,
+      title: typeof c.title === "string" ? c.title : s.title,
+      theme: c.theme === "app" || c.theme === "print" ? c.theme : s.theme,
+      showLegend: typeof c.showLegend === "boolean" ? c.showLegend : s.showLegend,
+    };
   }
 
   async function sendAi() {

@@ -22,7 +22,7 @@ export default async function LoginPage() {
         Sign in
       </h1>
       <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-        Welcome back.
+        Welcome.
       </p>
       <AuthForm mode="login" action={login} />
     </>

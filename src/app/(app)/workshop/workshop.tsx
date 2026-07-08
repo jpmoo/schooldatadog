@@ -926,7 +926,7 @@ export function Workshop({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search metrics (keyword + meaning)…"
+            placeholder="Search metrics…"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
           {grouped && grouped.length > 0 && (

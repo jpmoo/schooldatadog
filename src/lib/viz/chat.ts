@@ -91,14 +91,18 @@ A "chart" object looks like:
   "fields": [ { "id": "a", "metric": "<metric_code>", "years": ["2023-24"], "subgroup": "All Students", "label": "Short label" } ],
   "mark": "bar" | "line" | "point" | "area" | "rect",
   "encoding": { "x": {"field":"<ref>","type":"nominal|ordinal|quantitative|temporal"}, "y": {...}, "color": {...}, "column": {...} },
-  "title": "Chart title"
+  "title": "Chart title",
+  "showLegend": true | false,   // optional — hide the colour/size legend
+  "theme": "app" | "print"       // optional — colour palette
 }
+Return the FULL chart object each time you change anything — include every field, entity, encoding channel, and setting you want, because it REPLACES the current chart. Don't send a partial chart expecting the rest to stay.
 Rules:
 - "metric" MUST be one of the codes above. "years" and "subgroup" MUST be from the lists above.
 - Field "id" is your short handle; reference it in encoding channels.
 - Encoding channel "field" is either a field id, or a built-in column: "entityName", "year", "county", "homeDistrict".
 - For a line over time: put MULTIPLE years on ONE field, then x = {"field":"year","type":"ordinal"}, y = that field, color = {"field":"entityName","type":"nominal"}.
 - For comparing entities on one metric: mark "bar", x = entityName, y = the field.
+- For several years side-by-side per entity (grouped bars): ONE field with MULTIPLE years, mark "bar", x = entityName, y = the field, xOffset = {"field":"year","type":"nominal"}, color = {"field":"year","type":"nominal"}.
 - To HIGHLIGHT the user's own district, set color = {"field":"homeDistrict","type":"nominal"}. This built-in is "My district" for the user's district (and its schools) and "Other" for everyone else. It works on a normal bar chart (their bar gets its own color) AND on a histogram (bin scores on x with {"bin":true}, y = {"aggregate":"count"}, color = homeDistrict — the bin containing their district shows a distinct segment). So you CAN shade the user's district — use this instead of saying it's not possible.
 - For a histogram: x = a field with {"bin": true}, y = {"aggregate": "count"}, mark "bar".
 - "entities":"keep" leaves the current entity set unchanged (this is the default when entities are already selected).
