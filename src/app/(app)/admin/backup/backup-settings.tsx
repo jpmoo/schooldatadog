@@ -8,7 +8,7 @@ import {
   describeSchedule,
   type BackupConfig,
 } from "@/lib/backup/config";
-import type { BackupFile } from "@/lib/backup/run";
+import type { BackupFile, PgDumpStatus } from "@/lib/backup/run";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -31,10 +31,12 @@ export function BackupSettings({
   initialConfig,
   initialBackups,
   dir,
+  pgDump,
 }: {
   initialConfig: BackupConfig;
   initialBackups: BackupFile[];
   dir: string;
+  pgDump: PgDumpStatus;
 }) {
   const router = useRouter();
   const [cfg, setCfg] = useState<BackupConfig>(initialConfig);
@@ -87,6 +89,24 @@ export function BackupSettings({
             <h2 className="font-semibold text-slate-900 dark:text-white">Back up now</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Write a fresh backup immediately, then prune to the retention limit below.
+            </p>
+            <p className="mt-2 flex items-center gap-2 text-sm">
+              <span
+                className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                  pgDump.available ? "bg-emerald-500" : "bg-red-500"
+                }`}
+              />
+              {pgDump.available ? (
+                <span className="text-slate-600 dark:text-slate-300">
+                  <code className="text-xs">pg_dump</code> ready — PostgreSQL {pgDump.version}
+                </span>
+              ) : (
+                <span className="text-red-600 dark:text-red-400">
+                  <code className="text-xs">pg_dump</code> not found at{" "}
+                  <code className="text-xs">{pgDump.path}</code> — install the PostgreSQL client
+                  tools or set <code className="text-xs">PG_DUMP_PATH</code>.
+                </span>
+              )}
             </p>
           </div>
           <button

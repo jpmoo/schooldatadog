@@ -74,6 +74,23 @@ export async function performBackup(userId: number | null): Promise<BackupResult
   }
 }
 
+export type PgDumpStatus =
+  | { available: true; version: string; path: string }
+  | { available: false; path: string };
+
+/** Whether pg_dump can be run, and its version — for an at-a-glance UI badge. */
+export async function getPgDumpStatus(): Promise<PgDumpStatus> {
+  const pgDump = process.env.PG_DUMP_PATH || "pg_dump";
+  try {
+    const { stdout } = await run(pgDump, ["--version"], { maxBuffer: 1024 * 1024 });
+    // e.g. "pg_dump (PostgreSQL) 16.2 (Ubuntu 16.2-1.pgdg22.04+1)" -> "16.2"
+    const m = stdout.match(/\)\s*(\d[\w.]*)/);
+    return { available: true, version: m ? m[1] : stdout.trim(), path: pgDump };
+  } catch {
+    return { available: false, path: pgDump };
+  }
+}
+
 /** Existing backup files, newest first. */
 export async function listBackups(): Promise<BackupFile[]> {
   let names: string[];

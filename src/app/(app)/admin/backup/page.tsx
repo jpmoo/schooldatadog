@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guards";
-import { BACKUP_DIR, listBackups } from "@/lib/backup/run";
+import { BACKUP_DIR, getPgDumpStatus, listBackups } from "@/lib/backup/run";
 import { getBackupConfig } from "@/lib/settings";
 import { BackupSettings } from "./backup-settings";
 
 export default async function BackupPage() {
   await requireAdmin();
-  const [config, backups] = await Promise.all([getBackupConfig(), listBackups()]);
+  const [config, backups, pgDump] = await Promise.all([
+    getBackupConfig(),
+    listBackups(),
+    getPgDumpStatus(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -26,7 +30,12 @@ export default async function BackupPage() {
         </p>
       </div>
 
-      <BackupSettings initialConfig={config} initialBackups={backups} dir={BACKUP_DIR} />
+      <BackupSettings
+        initialConfig={config}
+        initialBackups={backups}
+        dir={BACKUP_DIR}
+        pgDump={pgDump}
+      />
     </div>
   );
 }
