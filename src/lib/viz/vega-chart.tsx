@@ -131,6 +131,36 @@ function toVegaLite(
     }),
   );
 
+  // Histogram highlight: on an aggregated (binned + count) bar a per-datum
+  // highlight can't work, so colour the whole bin that contains the home
+  // district by max(isHome). Replaces the datum-condition highlight here.
+  const extraTransform: Record<string, unknown>[] = [];
+  const xd = (enc.x ?? {}) as Record<string, unknown>;
+  const yd = (enc.y ?? {}) as Record<string, unknown>;
+  const isHistogram = spec.mark === "bar" && "bin" in xd && yd.aggregate === "count";
+  const hlActive = ["opacity", "stroke", "color"].some((k) => {
+    const c = ((enc[k] ?? {}) as Record<string, unknown>).condition as Record<string, unknown> | undefined;
+    return typeof c?.test === "string" && c.test.includes("homeDistrict");
+  });
+  if (isHistogram && hlActive) {
+    const colorCond = ((enc.color ?? {}) as Record<string, unknown>).condition as
+      | Record<string, unknown>
+      | undefined;
+    const hlColor = typeof colorCond?.value === "string" ? colorCond.value : "#f59e0b";
+    const e = encoding as Record<string, unknown>;
+    delete e.opacity;
+    delete e.stroke;
+    delete e.strokeWidth;
+    e.color = {
+      aggregate: "max",
+      field: "_home",
+      type: "ordinal",
+      scale: { domain: [0, 1], range: ["#94a3b8", hlColor] },
+      legend: null,
+    };
+    extraTransform.push({ calculate: "datum.homeDistrict === 'My district' ? 1 : 0", as: "_home" });
+  }
+
   // Minor gridlines: Vega-Lite has no native minor ticks, so draw evenly-spaced
   // rules between the (explicit or data-derived) axis bounds, sharing the scale.
   const minorLayers: Record<string, unknown>[] = [];
@@ -170,7 +200,9 @@ function toVegaLite(
     background: "transparent",
     ...(spec.title ? { title: spec.title } : {}),
     data: { values: rows },
-    ...(spec.transform ? { transform: spec.transform } : {}),
+    ...(spec.transform || extraTransform.length
+      ? { transform: [...(spec.transform ?? []), ...extraTransform] }
+      : {}),
     ...chartLayer,
   };
 }

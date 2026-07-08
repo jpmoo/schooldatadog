@@ -482,12 +482,16 @@ export function Visualizer({
       if (!field) delete enc[ch];
       else {
         const isField = columns.find((c) => c.id === field)?.kind === "field";
+        // Preserve binning when swapping the field on a histogram's axis.
+        const prev = enc[ch] as Record<string, unknown> | undefined;
+        const keepBin = prev && "bin" in prev ? { bin: prev.bin } : {};
         enc[ch] = {
           field,
           type:
             ch === "x" || ch === "y" || ch === "size"
               ? isField ? "quantitative" : field === "year" ? "ordinal" : "nominal"
               : field === "year" ? "ordinal" : "nominal",
+          ...keepBin,
         };
       }
       return { ...s, encoding: enc };
@@ -558,8 +562,19 @@ export function Visualizer({
     setSpec((s) => {
       const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
       if (value === "histogram") {
-        const xf = (enc.x?.field as string) || s.data.fields[0]?.id || s.data.calc[0]?.id;
-        if (xf) enc.x = { ...(enc.x ?? {}), field: xf, type: "quantitative", bin: true };
+        // Bin a numeric VALUE field (a metric / calc field) on x — never a
+        // built-in like entityName. Prefer the current y field, then x, then
+        // the first data field.
+        const dataIds = new Set([...s.data.fields.map((f) => f.id), ...s.data.calc.map((c) => c.id)]);
+        const yf = enc.y?.field as string | undefined;
+        const xf = enc.x?.field as string | undefined;
+        const binField =
+          (yf && dataIds.has(yf) && yf) ||
+          (xf && dataIds.has(xf) && xf) ||
+          s.data.fields[0]?.id ||
+          s.data.calc[0]?.id;
+        if (!binField) return { ...s, mark: "bar" }; // nothing numeric to bin
+        enc.x = { field: binField, type: "quantitative", bin: true };
         enc.y = { aggregate: "count", type: "quantitative" };
         return { ...s, mark: "bar", encoding: enc as ChartSpec["encoding"] };
       }
