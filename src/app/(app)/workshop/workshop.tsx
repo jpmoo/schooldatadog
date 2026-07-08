@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { createGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
+import { createView } from "@/lib/views/actions";
 import { getColumnValues, searchMetrics } from "@/lib/workshop/actions";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
 import type { MetricLite } from "@/lib/workshop/types";
@@ -26,6 +27,7 @@ import {
   type CalcColumn,
   type Column,
   type DataColumn,
+  type SavedViewState,
   type SortKey,
 } from "./columns";
 
@@ -176,6 +178,8 @@ export function Workshop({
   entities,
   initialMetrics,
   initialGroups,
+  initialView,
+  initialViewName,
   homeDistrictId,
 }: {
   years: string[];
@@ -183,6 +187,8 @@ export function Workshop({
   entities: WorkshopEntity[];
   initialMetrics: MetricLite[];
   initialGroups: GroupLite[];
+  initialView: SavedViewState | null;
+  initialViewName: string | null;
   homeDistrictId: number | null;
 }) {
   const [year, setYear] = useState(years[0] ?? "");
@@ -200,6 +206,8 @@ export function Workshop({
   const [groups, setGroups] = useState<GroupLite[]>(initialGroups);
   const [groupFilter, setGroupFilter] = useState("");
   const [groupDialog, setGroupDialog] = useState(false);
+  const [viewDialog, setViewDialog] = useState(false);
+  const [viewName, setViewName] = useState(initialViewName);
 
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -474,6 +482,80 @@ export function Workshop({
     return res;
   }
 
+  // ── saved views ──
+  function captureState(): SavedViewState {
+    return {
+      year,
+      viewMode,
+      county,
+      hidden: [...hidden],
+      collapsed: [...collapsed],
+      districtSort,
+      schoolSort,
+      groupFilter,
+      columns: columns.map((c) =>
+        c.kind === "data"
+          ? { id: c.id, kind: "data", metric: c.metric, year: c.year }
+          : c,
+      ),
+    };
+  }
+  async function fetchColumnValues(cols: DataColumn[]) {
+    setLoading((s) => {
+      const n = new Set(s);
+      cols.forEach((c) => n.add(c.id));
+      return n;
+    });
+    await Promise.all(
+      cols.map(async (c) => {
+        const vals = await getColumnValues(c.metric.code, c.year);
+        const map: Record<number, number | null> = {};
+        for (const v of vals) map[v.entityId] = v.value;
+        setColumns((cs) => cs.map((x) => (x.id === c.id ? { ...(x as DataColumn), values: map } : x)));
+        setLoading((s) => {
+          const n = new Set(s);
+          n.delete(c.id);
+          return n;
+        });
+      }),
+    );
+  }
+  function applyView(v: SavedViewState) {
+    setYear(v.year);
+    setViewMode(v.viewMode);
+    setCounty(v.county);
+    setHidden(new Set(v.hidden));
+    setCollapsed(new Set(v.collapsed));
+    setDistrictSort(v.districtSort);
+    setSchoolSort(v.schoolSort);
+    setGroupFilter(v.groupFilter);
+    const cols: Column[] = v.columns.map((c) =>
+      c.kind === "data"
+        ? { id: c.id, kind: "data", metric: c.metric, year: c.year, values: {} }
+        : c,
+    );
+    setColumns(cols);
+    void fetchColumnValues(cols.filter((c): c is DataColumn => c.kind === "data"));
+  }
+  async function handleSaveView(name: string) {
+    const res = await createView(name, captureState());
+    if (res.ok) {
+      setViewName(res.view.name);
+      setViewDialog(false);
+    }
+    return res;
+  }
+
+  // Restore a saved view once, when opened via /workshop?view=<id>.
+  const appliedView = useRef(false);
+  useEffect(() => {
+    if (initialView && !appliedView.current) {
+      appliedView.current = true;
+      applyView(initialView);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── drag handlers ──
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
@@ -625,7 +707,16 @@ export function Workshop({
                 ⌖ My district
               </button>
             )}
+            <button
+              onClick={() => setViewDialog(true)}
+              disabled={columns.length === 0}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              title="Save all filters, sorts & columns as a named view"
+            >
+              💾 Save view
+            </button>
             <span className="ml-auto text-xs text-slate-400">
+              {viewName ? <span className="mr-2 text-indigo-500">“{viewName}”</span> : null}
               {rows.length.toLocaleString()} rows · {columns.length} column{columns.length === 1 ? "" : "s"}
             </span>
           </div>
@@ -832,6 +923,18 @@ export function Workshop({
           onClose={() => setGroupDialog(false)}
         />
       )}
+
+      {viewDialog && (
+        <NameDialog
+          title="Save view"
+          blurb="Save every filter, sort, and column (including calculated fields) as a named view you can reopen from the dashboard."
+          initialName={viewName ?? ""}
+          submitLabel="Save view"
+          placeholder="e.g. Westchester grad-rate scan"
+          onSubmit={handleSaveView}
+          onClose={() => setViewDialog(false)}
+        />
+      )}
     </>
   );
 }
@@ -846,16 +949,47 @@ function GroupDialog({
   onCreate: (name: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
 }) {
-  const [name, setName] = useState("");
+  return (
+    <NameDialog
+      title="Create group"
+      blurb={`Save ${count} selected ${count === 1 ? "entity" : "entities"} as a reusable group.`}
+      initialName=""
+      submitLabel="Create group"
+      placeholder="e.g. My comparison set"
+      onSubmit={onCreate}
+      onClose={onClose}
+    />
+  );
+}
+
+// ── generic name-prompt dialog (create group / save view) ──
+function NameDialog({
+  title,
+  blurb,
+  initialName,
+  submitLabel,
+  placeholder,
+  onSubmit,
+  onClose,
+}: {
+  title: string;
+  blurb: string;
+  initialName: string;
+  submitLabel: string;
+  placeholder?: string;
+  onSubmit: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit() {
     setSaving(true);
     setError(null);
-    const res = await onCreate(name.trim());
+    const res = await onSubmit(name.trim());
     setSaving(false);
-    if (!res.ok) setError(res.error ?? "Couldn't create the group.");
+    if (!res.ok) setError(res.error ?? "Something went wrong.");
   }
 
   return (
@@ -864,12 +998,10 @@ function GroupDialog({
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Create group</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Save {count} selected {count === 1 ? "entity" : "entities"} as a reusable group.
-        </p>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{blurb}</p>
         <label className="mt-4 flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-200">Group name</span>
+          <span className="font-medium text-slate-700 dark:text-slate-200">Name</span>
           <input
             autoFocus
             value={name}
@@ -877,7 +1009,7 @@ function GroupDialog({
             onKeyDown={(e) => {
               if (e.key === "Enter" && name.trim() && !saving) submit();
             }}
-            placeholder="e.g. My comparison set"
+            placeholder={placeholder}
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
         </label>
@@ -894,7 +1026,7 @@ function GroupDialog({
             onClick={submit}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
-            {saving ? "Creating…" : "Create group"}
+            {saving ? "Saving…" : submitLabel}
           </button>
         </div>
       </div>

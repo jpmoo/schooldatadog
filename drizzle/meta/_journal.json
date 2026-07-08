@@ -57,6 +57,13 @@
       "when": 1783469228150,
       "tag": "0007_breezy_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783469702216,
+      "tag": "0008_worried_iron_monger",
+      "breakpoints": true
     }
   ]
 }

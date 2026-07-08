@@ -11,6 +11,11 @@ const tiles = [
     href: "/workshop",
   },
   {
+    title: "Saved Views",
+    body: "Reopen, rename, or delete full workshop sessions — filters, sorts, and calculated fields.",
+    href: "/views",
+  },
+  {
     title: "Saved Groups",
     body: "Preview, rename, and delete the school & district groups you use as workshop filters.",
     href: "/groups",

@@ -225,6 +225,30 @@ export const entityGroups = pgTable(
   (t) => [index("entity_groups_user_idx").on(t.userId)],
 );
 
+/**
+ * A saved Data Workshop session: a named, serialized snapshot of every filter,
+ * sort, and column (including calculated fields). Stored per-user as opaque
+ * JSON — the workshop knows how to (de)serialize it; the DB just holds it.
+ */
+export const savedViews = pgTable(
+  "saved_views",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    state: jsonb("state").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("saved_views_user_idx").on(t.userId)],
+);
+
 /* ------------------------------------------------------------------ *
  * App settings (key/value)
  * ------------------------------------------------------------------ */
@@ -298,6 +322,8 @@ export type NewFact = typeof facts.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
 export type EntityGroup = typeof entityGroups.$inferSelect;
 export type NewEntityGroup = typeof entityGroups.$inferInsert;
+export type SavedView = typeof savedViews.$inferSelect;
+export type NewSavedView = typeof savedViews.$inferInsert;
 
 export type UserRole = (typeof userRole.enumValues)[number];
 export type EntityType = (typeof entityType.enumValues)[number];

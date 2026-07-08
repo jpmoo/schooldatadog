@@ -34,6 +34,26 @@ export const CALC_LABELS: Record<CalcType, string> = {
 /** A sort level is an ordered list of keys (Excel-style multi-column sort). */
 export type SortKey = { key: string; dir: "asc" | "desc" }; // key = column id or "name"
 
+/**
+ * A fully serializable snapshot of a workshop session — everything needed to
+ * restore filters, sorts, and columns. Data-column *values* are intentionally
+ * omitted (they're re-fetched on open); only the metric + year are stored.
+ */
+export type SavedDataColumn = { id: string; kind: "data"; metric: MetricLite; year: string };
+export type SavedColumn = SavedDataColumn | CalcColumn;
+
+export type SavedViewState = {
+  year: string;
+  viewMode: "districts" | "both";
+  county: string;
+  hidden: number[];
+  collapsed: number[];
+  districtSort: SortKey[];
+  schoolSort: SortKey[];
+  groupFilter: string;
+  columns: SavedColumn[];
+};
+
 function dataVal(col: DataColumn, entityId: number): number | null {
   const v = col.values[entityId];
   return v === undefined ? null : v;
