@@ -347,34 +347,70 @@ export function Workshop({
     });
   }
 
-  // Switch a data column to a different demographic subgroup and refetch it.
-  async function setColumnSubgroup(colId: string, subgroup: string) {
-    const col = columns.find((c) => c.id === colId);
-    if (!col || col.kind !== "data" || col.subgroup === subgroup) return;
-    if (
-      columns.some(
-        (c) =>
-          c.kind === "data" &&
-          c.id !== colId &&
-          c.metric.code === col.metric.code &&
-          c.year === col.year &&
-          c.subgroup === subgroup,
-      )
-    )
-      return; // that metric/year/subgroup is already a column
-    setColumns((cs) =>
-      cs.map((c) => (c.id === colId ? { ...(c as DataColumn), subgroup, values: {} } : c)),
+  // Reconcile the demographic columns for a metric/year to exactly `subgroups`:
+  // add a column per newly-checked demographic, drop columns for unchecked ones.
+  // (Each demographic is a separate column — NYSED reports one breakdown at a
+  // time, so a true cross-tab like "Hispanic AND non-poverty" isn't in the data.)
+  async function applyColumnSubgroups(baseColId: string, subgroups: string[]) {
+    const base = columns.find((c) => c.id === baseColId);
+    if (!base || base.kind !== "data") return;
+    const { metric, year } = base;
+    const want = new Set(subgroups);
+
+    const existing = columns.filter(
+      (c): c is DataColumn => c.kind === "data" && c.metric.code === metric.code && c.year === year,
     );
-    setLoading((s) => new Set(s).add(colId));
-    const vals = await getColumnValues(col.metric.code, col.year, subgroup);
-    const map: Record<number, number | null> = {};
-    for (const v of vals) map[v.entityId] = v.value;
-    setColumns((cs) => cs.map((c) => (c.id === colId ? { ...(c as DataColumn), values: map } : c)));
+    const existingSubs = new Set(existing.map((c) => c.subgroup));
+    const removeIds = new Set(existing.filter((c) => !want.has(c.subgroup)).map((c) => c.id));
+    const addSubs = subgroups.filter((sg) => !existingSubs.has(sg));
+
+    const stamp = Math.round(performance.now());
+    const newCols: DataColumn[] = addSubs.map((sg, k) => ({
+      id: `data-${metric.code}-${year}-${stamp}-${k}`,
+      kind: "data",
+      metric,
+      year,
+      subgroup: sg,
+      values: {},
+    }));
+
+    setColumns((cs) => {
+      const kept = cs
+        .filter((c) => !removeIds.has(c.id))
+        .map((c) =>
+          c.kind === "calc" ? { ...c, sourceIds: c.sourceIds.filter((id) => !removeIds.has(id)) } : c,
+        );
+      // Insert the new columns right after the metric's last surviving column.
+      let insertAt = kept.length;
+      for (let idx = kept.length - 1; idx >= 0; idx--) {
+        const c = kept[idx];
+        if (c.kind === "data" && c.metric.code === metric.code && c.year === year) {
+          insertAt = idx + 1;
+          break;
+        }
+      }
+      return [...kept.slice(0, insertAt), ...newCols, ...kept.slice(insertAt)];
+    });
+
+    if (newCols.length === 0) return;
     setLoading((s) => {
       const n = new Set(s);
-      n.delete(colId);
+      newCols.forEach((c) => n.add(c.id));
       return n;
     });
+    await Promise.all(
+      newCols.map(async (c) => {
+        const vals = await getColumnValues(metric.code, year, c.subgroup);
+        const map: Record<number, number | null> = {};
+        for (const v of vals) map[v.entityId] = v.value;
+        setColumns((cs) => cs.map((x) => (x.id === c.id ? { ...(x as DataColumn), values: map } : x)));
+        setLoading((s) => {
+          const n = new Set(s);
+          n.delete(c.id);
+          return n;
+        });
+      }),
+    );
   }
 
   function submitCalc(config: CalcConfig) {
@@ -1082,8 +1118,16 @@ export function Workshop({
       {subgroupCol && (
         <SubgroupDialog
           column={subgroupCol}
-          onPick={(sg) => {
-            void setColumnSubgroup(subgroupCol.id, sg);
+          active={columns
+            .filter(
+              (c): c is DataColumn =>
+                c.kind === "data" &&
+                c.metric.code === subgroupCol.metric.code &&
+                c.year === subgroupCol.year,
+            )
+            .map((c) => c.subgroup)}
+          onApply={(subs) => {
+            void applyColumnSubgroups(subgroupCol.id, subs);
             setSubgroupCol(null);
           }}
           onClose={() => setSubgroupCol(null)}
@@ -1144,17 +1188,20 @@ function ConfirmDialog({
   );
 }
 
-// ── choose a demographic subgroup for a data column ──
+// ── turn demographic slices of a metric on/off (one column each) ──
 function SubgroupDialog({
   column,
-  onPick,
+  active,
+  onApply,
   onClose,
 }: {
   column: DataColumn;
-  onPick: (subgroup: string) => void;
+  active: string[]; // subgroups of this metric/year that currently have a column
+  onApply: (subgroups: string[]) => void;
   onClose: () => void;
 }) {
   const [subgroups, setSubgroups] = useState<string[] | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set(active));
 
   useEffect(() => {
     let live = true;
@@ -1166,16 +1213,25 @@ function SubgroupDialog({
     };
   }, [column.metric.code, column.year]);
 
+  const toggle = (sg: string) =>
+    setChecked((prev) => {
+      const n = new Set(prev);
+      if (n.has(sg)) n.delete(sg);
+      else n.add(sg);
+      return n;
+    });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Demographic subgroup</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Demographics</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Slice <span className="font-medium">{column.metric.name}</span> ({column.year}) by a
-          demographic group. Only groups with data for this metric are listed.
+          Turn demographic slices of <span className="font-medium">{column.metric.name}</span> (
+          {column.year}) on or off — each checked group becomes its own column. Only groups with
+          data for this metric are listed.
         </p>
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
           {subgroups === null ? (
@@ -1185,32 +1241,37 @@ function SubgroupDialog({
               This metric isn&apos;t broken down by demographics — only “All Students” is available.
             </p>
           ) : (
-            <div className="space-y-1">
-              {subgroups.map((sg) => {
-                const active = sg === column.subgroup;
-                return (
-                  <button
-                    key={sg}
-                    onClick={() => onPick(sg)}
-                    className={`block w-full rounded-lg px-3 py-1.5 text-left text-sm ${
-                      active
-                        ? "bg-indigo-600 text-white"
-                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    {sg}
-                  </button>
-                );
-              })}
+            <div className="space-y-0.5">
+              {subgroups.map((sg) => (
+                <label
+                  key={sg}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <input type="checkbox" checked={checked.has(sg)} onChange={() => toggle(sg)} />
+                  <span className="text-slate-700 dark:text-slate-200">{sg}</span>
+                </label>
+              ))}
             </div>
           )}
         </div>
-        <div className="mt-4 flex justify-end">
+        {subgroups && subgroups.length > 1 && (
+          <p className="mt-2 text-xs text-slate-400">
+            These are separate breakdowns, not a combined filter — the source reports one at a time,
+            so an intersection like “Hispanic &amp; non-poverty” isn&apos;t available.
+          </p>
+        )}
+        <div className="mt-4 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
             className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            Close
+            Cancel
+          </button>
+          <button
+            onClick={() => onApply([...checked])}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+          >
+            Apply
           </button>
         </div>
       </div>
