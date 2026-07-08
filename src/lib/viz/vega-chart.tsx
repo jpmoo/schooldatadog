@@ -32,8 +32,18 @@ function themeConfig(theme: ChartSpec["theme"]) {
   };
 }
 
-/** Compile a ChartSpec's encoding layer + resolved rows into a Vega-Lite spec. */
-function toVegaLite(spec: ChartSpec, rows: Row[]) {
+/** Compile a ChartSpec's encoding layer + resolved rows into a Vega-Lite spec.
+ * `labels` maps a field id / built-in to its friendly name so axes and legends
+ * read nicely; an explicit channel `title` always wins. */
+function toVegaLite(spec: ChartSpec, rows: Row[], labels: Record<string, string>) {
+  const enc = spec.encoding ?? {};
+  const encoding = Object.fromEntries(
+    Object.entries(enc).map(([ch, def]) => {
+      const d = (def ?? {}) as Record<string, unknown>;
+      const friendly = typeof d.field === "string" ? labels[d.field] : undefined;
+      return [ch, { ...d, title: d.title ?? friendly ?? d.field }];
+    }),
+  );
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",
     width: "container",
@@ -44,17 +54,19 @@ function toVegaLite(spec: ChartSpec, rows: Row[]) {
     data: { values: rows },
     ...(spec.transform ? { transform: spec.transform } : {}),
     mark: spec.mark ?? "bar",
-    encoding: spec.encoding ?? {},
+    encoding,
   };
 }
 
 export function VegaChart({
   spec,
   rows,
+  labels = {},
   onView,
 }: {
   spec: ChartSpec;
   rows: Row[];
+  labels?: Record<string, string>;
   onView?: (view: View | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +81,7 @@ export function VegaChart({
       setError(null);
       try {
         const embed = (await import("vega-embed")).default;
-        const res = await embed(el, toVegaLite(spec, rows) as never, {
+        const res = await embed(el, toVegaLite(spec, rows, labels) as never, {
           renderer: "svg",
           actions: false,
           config: themeConfig(spec.theme) as never,
@@ -92,7 +104,7 @@ export function VegaChart({
       onView?.(null);
       finalize?.();
     };
-  }, [spec, rows, onView]);
+  }, [spec, rows, labels, onView]);
 
   return (
     <div className="w-full">

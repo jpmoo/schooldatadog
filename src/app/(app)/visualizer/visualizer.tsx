@@ -346,6 +346,7 @@ export function Visualizer({
   }, [spec, showJson]);
 
   const columns = useMemo(() => columnsOf(spec.data.fields, spec.data.calc), [spec.data.fields, spec.data.calc]);
+  const axisLabels = useMemo(() => Object.fromEntries(columns.map((c) => [c.id, c.label])), [columns]);
 
   function addField(m: MetricLite) {
     const f: FieldSpec = {
@@ -395,6 +396,19 @@ export function Visualizer({
               : field === "year" ? "ordinal" : "nominal",
         };
       }
+      return { ...s, encoding: enc };
+    });
+
+  // Override a channel's axis/legend label; empty reverts to the friendly default.
+  const setChannelTitle = (ch: string, title: string) =>
+    setSpec((s) => {
+      const cur = s.encoding?.[ch];
+      if (!cur) return s;
+      const enc = { ...(s.encoding ?? {}) };
+      const next = { ...cur };
+      if (title) next.title = title;
+      else delete next.title;
+      enc[ch] = next;
       return { ...s, encoding: enc };
     });
 
@@ -621,7 +635,7 @@ export function Visualizer({
             </div>
           ) : canRender ? (
             <div className="rounded-lg bg-white p-2">
-              <VegaChart spec={spec} rows={rows} onView={(v) => (viewRef.current = v)} />
+              <VegaChart spec={spec} rows={rows} labels={axisLabels} onView={(v) => (viewRef.current = v)} />
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center text-center text-sm text-slate-400">
@@ -638,15 +652,27 @@ export function Visualizer({
             {MARKS.map((m) => (<option key={m} value={m}>{m}</option>))}
           </select>
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Encoding</p>
-          {CHANNELS.map((ch) => (
-            <label key={ch} className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600 dark:text-slate-300">{ch}</span>
-              <select value={spec.encoding?.[ch]?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
-                <option value="">—</option>
-                {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
-              </select>
-            </label>
-          ))}
+          {CHANNELS.map((ch) => {
+            const def = spec.encoding?.[ch];
+            return (
+              <label key={ch} className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600 dark:text-slate-300">{ch}</span>
+                <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
+                  <option value="">—</option>
+                  {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
+                </select>
+                {def?.field && (
+                  <input
+                    value={def.title ?? ""}
+                    onChange={(e) => setChannelTitle(ch, e.target.value)}
+                    placeholder={`Label: ${axisLabels[def.field] ?? def.field}`}
+                    className={`${input} text-xs`}
+                    title="Axis / legend label"
+                  />
+                )}
+              </label>
+            );
+          })}
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Style</p>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Palette</span>
