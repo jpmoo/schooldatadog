@@ -32,7 +32,7 @@ const PRIMARY_CHANNELS = [
   { ch: "color", label: "Color by", hint: "A separate color for each value." },
 ] as const;
 const ADVANCED_CHANNELS = [
-  { ch: "xOffset", label: "Side-by-side bars", hint: "Splits bars that share a spot into a cluster (grouped instead of stacked)." },
+  { ch: "xOffset", label: "Side-by-side bars", hint: "Groups each bar into a cluster — e.g. set to Year to show years side by side per district." },
   { ch: "column", label: "Small charts across", hint: "One mini-chart per value, left → right." },
   { ch: "row", label: "Small charts down", hint: "One mini-chart per value, top → bottom." },
   { ch: "size", label: "Bubble size", hint: "Bigger mark = bigger value. Best with Dots." },
@@ -851,12 +851,16 @@ export function Visualizer({
           {advOpen &&
             ADVANCED_CHANNELS.map(({ ch, label, hint }) => {
               const def = spec.encoding?.[ch];
+              // Splitting/faceting only makes sense over a category (Year,
+              // County, Type, …), not a numeric measure — so those channels
+              // offer the dimension columns only. Size stays numeric-friendly.
+              const opts = ch === "size" ? columns : columns.filter((c) => c.kind === "builtin");
               return (
                 <label key={ch} className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
                   <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
                     <option value="">— none —</option>
-                    {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
+                    {opts.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
                   </select>
                   <span className="text-[11px] text-slate-400">{hint}</span>
                 </label>
