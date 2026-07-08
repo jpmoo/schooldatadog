@@ -103,8 +103,8 @@ export async function visualizerChat(
     };
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000);
+  // No client-side timeout — a local model can legitimately take minutes to
+  // think, especially for open-ended questions. Let it run to completion.
   try {
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: "POST",
@@ -116,7 +116,6 @@ export async function visualizerChat(
         options: { temperature: 0.2 },
         messages: [{ role: "system", content: systemPrompt(catalog, currentSpec) }, ...messages],
       }),
-      signal: controller.signal,
       cache: "no-store",
     });
     if (!res.ok) return { ok: false, error: `The AI server returned HTTP ${res.status}.` };
@@ -132,10 +131,7 @@ export async function visualizerChat(
     }
     // No JSON at all — treat the whole thing as a prose answer.
     return { ok: true, reply: content || "(no response)", chart: null };
-  } catch (e) {
-    const aborted = e instanceof Error && e.name === "AbortError";
-    return { ok: false, error: aborted ? "The AI took too long to respond." : "Couldn't reach the AI server." };
-  } finally {
-    clearTimeout(timer);
+  } catch {
+    return { ok: false, error: "Couldn't reach the AI server." };
   }
 }

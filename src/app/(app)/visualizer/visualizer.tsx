@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { View } from "vega";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
@@ -64,6 +64,9 @@ export function Visualizer({
   const [jsonText, setJsonText] = useState("");
   const [jsonErr, setJsonErr] = useState<string | null>(null);
   const viewRef = useRef<View | null>(null);
+  const onChartView = useCallback((v: View | null) => {
+    viewRef.current = v;
+  }, []);
 
   // metric browser
   const [year, setYear] = useState(years[0] ?? "");
@@ -329,12 +332,16 @@ export function Visualizer({
       return;
     }
     setResolving(true);
-    resolveDataset(spec.data, entitiesById).then((res) => {
-      if (live) {
-        setRows(res.rows);
-        setResolving(false);
-      }
-    });
+    resolveDataset(spec.data, entitiesById)
+      .then((res) => {
+        if (live) {
+          setRows(res.rows);
+          setResolving(false);
+        }
+      })
+      .catch(() => {
+        if (live) setResolving(false);
+      });
     return () => {
       live = false;
     };
@@ -635,7 +642,7 @@ export function Visualizer({
             </div>
           ) : canRender ? (
             <div className="rounded-lg bg-white p-2">
-              <VegaChart spec={spec} rows={rows} labels={axisLabels} onView={(v) => (viewRef.current = v)} />
+              <VegaChart spec={spec} rows={rows} labels={axisLabels} onView={onChartView} />
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center text-center text-sm text-slate-400">

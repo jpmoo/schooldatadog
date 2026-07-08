@@ -71,6 +71,11 @@ export function VegaChart({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // Keep the latest onView without making it an effect dependency — otherwise a
+  // fresh inline callback each render would re-run the embed effect constantly
+  // and let overlapping async embeds race (a stale one could win).
+  const onViewRef = useRef(onView);
+  onViewRef.current = onView;
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +86,7 @@ export function VegaChart({
       setError(null);
       try {
         const embed = (await import("vega-embed")).default;
+        if (cancelled) return;
         const res = await embed(el, toVegaLite(spec, rows, labels) as never, {
           renderer: "svg",
           actions: false,
@@ -91,20 +97,20 @@ export function VegaChart({
           return;
         }
         finalize = res.finalize;
-        onView?.(res.view);
+        onViewRef.current?.(res.view);
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Could not render this chart.");
-          onView?.(null);
+          onViewRef.current?.(null);
         }
       }
     })();
     return () => {
       cancelled = true;
-      onView?.(null);
+      onViewRef.current?.(null);
       finalize?.();
     };
-  }, [spec, rows, labels, onView]);
+  }, [spec, rows, labels]);
 
   return (
     <div className="w-full">
