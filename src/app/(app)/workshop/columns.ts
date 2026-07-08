@@ -2,11 +2,14 @@ import type { MetricLite } from "@/lib/workshop/types";
 
 export type CalcType = "avg" | "change" | "avgchange" | "rank" | "similarity";
 
+export const ALL_STUDENTS = "All Students";
+
 export type DataColumn = {
   id: string;
   kind: "data";
   metric: MetricLite;
   year: string;
+  subgroup: string; // demographic slice; "All Students" = no breakdown
   values: Record<number, number | null>;
 };
 
@@ -39,7 +42,13 @@ export type SortKey = { key: string; dir: "asc" | "desc" }; // key = column id o
  * restore filters, sorts, and columns. Data-column *values* are intentionally
  * omitted (they're re-fetched on open); only the metric + year are stored.
  */
-export type SavedDataColumn = { id: string; kind: "data"; metric: MetricLite; year: string };
+export type SavedDataColumn = {
+  id: string;
+  kind: "data";
+  metric: MetricLite;
+  year: string;
+  subgroup: string;
+};
 export type SavedColumn = SavedDataColumn | CalcColumn;
 
 export type SavedViewState = {

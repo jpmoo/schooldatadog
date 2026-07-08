@@ -147,12 +147,13 @@ export async function searchMetrics(query: string, year?: string): Promise<Metri
 }
 
 /**
- * Values for one metric/year column across all entities (subgroup "All
- * Students"). The client keys these by entity id and filters/pivots locally.
+ * Values for one metric/year/subgroup column across all entities. The client
+ * keys these by entity id and filters/pivots locally.
  */
 export async function getColumnValues(
   metricCode: string,
   year: string,
+  subgroup = "All Students",
 ): Promise<CellValue[]> {
   await requireUser();
   const rows = await db
@@ -164,8 +165,44 @@ export async function getColumnValues(
       and(
         eq(metrics.code, metricCode),
         eq(facts.schoolYear, year),
-        eq(facts.subgroup, "All Students"),
+        eq(facts.subgroup, subgroup),
       ),
     );
   return rows.map((r) => ({ entityId: r.entityId, value: r.value }));
+}
+
+// Canonical display order for demographic subgroups (matches the ingest's
+// canonical labels). Anything unlisted sorts after, alphabetically.
+const SUBGROUP_ORDER = [
+  "All Students",
+  "Female", "Male", "Non-Binary",
+  "American Indian or Alaska Native", "Asian or Native Hawaiian/Other Pacific Islander",
+  "Black or African American", "Hispanic or Latino", "Multiracial", "White",
+  "Economically Disadvantaged", "Not Economically Disadvantaged",
+  "Students with Disabilities", "Students without Disabilities", "General Education Students",
+  "English Language Learners", "Not English Language Learners", "Former English Language Learners",
+  "Migrant", "Homeless", "In Foster Care",
+];
+
+/** The demographic subgroups that have data for a given metric + year. */
+export async function getMetricSubgroups(metricCode: string, year: string): Promise<string[]> {
+  await requireUser();
+  const rows = await db
+    .selectDistinct({ subgroup: facts.subgroup })
+    .from(facts)
+    .innerJoin(metrics, eq(metrics.id, facts.metricId))
+    .where(
+      and(
+        eq(metrics.code, metricCode),
+        eq(facts.schoolYear, year),
+        or(isNotNull(facts.valueNumeric), isNotNull(facts.valueText)),
+      ),
+    );
+  const rank = (s: string) => {
+    const i = SUBGROUP_ORDER.indexOf(s);
+    return i === -1 ? SUBGROUP_ORDER.length : i;
+  };
+  return rows
+    .map((r) => r.subgroup)
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }

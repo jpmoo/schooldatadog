@@ -15,11 +15,12 @@ import {
 import { createGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import { createView } from "@/lib/views/actions";
-import { getColumnValues, searchMetrics } from "@/lib/workshop/actions";
+import { getColumnValues, getMetricSubgroups, searchMetrics } from "@/lib/workshop/actions";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
 import type { MetricLite } from "@/lib/workshop/types";
 import { CalcDialog, type CalcConfig } from "./calc-dialog";
 import {
+  ALL_STUDENTS,
   compareBySortKeys,
   computeCalc,
   formatCalc,
@@ -96,6 +97,7 @@ function ColumnHeader({
   };
   const title = col.kind === "data" ? col.metric.name : col.name;
   const sub = col.kind === "data" ? col.year : "calculated";
+  const subgroup = col.kind === "data" && col.subgroup !== ALL_STUDENTS ? col.subgroup : null;
 
   return (
     <th
@@ -114,6 +116,11 @@ function ColumnHeader({
             {col.kind === "calc" ? "ƒ " : ""}
             {sub}
           </span>
+          {subgroup && (
+            <span className="mt-0.5 block truncate rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+              {subgroup}
+            </span>
+          )}
         </span>
         <button
           onClick={() => onRemove(col.id)}
@@ -218,6 +225,7 @@ export function Workshop({
   const [ctx, setCtx] = useState<Ctx | null>(null);
   const [dragging, setDragging] = useState<{ kind: string; label: string } | null>(null);
   const [openCats, setOpenCats] = useState<Set<string>>(new Set());
+  const [subgroupCol, setSubgroupCol] = useState<DataColumn | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -322,19 +330,57 @@ export function Workshop({
   }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns]);
 
   // ── column ops ──
-  async function addDataColumn(metric: MetricLite, yr: string) {
-    if (columns.some((c) => c.kind === "data" && c.metric.code === metric.code && c.year === yr))
+  async function addDataColumn(metric: MetricLite, yr: string, subgroup = ALL_STUDENTS) {
+    if (
+      columns.some(
+        (c) =>
+          c.kind === "data" &&
+          c.metric.code === metric.code &&
+          c.year === yr &&
+          c.subgroup === subgroup,
+      )
+    )
       return;
     const id = `data-${metric.code}-${yr}-${columns.length}-${Math.round(performance.now())}`;
-    setColumns((cs) => [...cs, { id, kind: "data", metric, year: yr, values: {} }]);
+    setColumns((cs) => [...cs, { id, kind: "data", metric, year: yr, subgroup, values: {} }]);
     setLoading((s) => new Set(s).add(id));
-    const vals = await getColumnValues(metric.code, yr);
+    const vals = await getColumnValues(metric.code, yr, subgroup);
     const map: Record<number, number | null> = {};
     for (const v of vals) map[v.entityId] = v.value;
     setColumns((cs) => cs.map((c) => (c.id === id ? { ...(c as DataColumn), values: map } : c)));
     setLoading((s) => {
       const n = new Set(s);
       n.delete(id);
+      return n;
+    });
+  }
+
+  // Switch a data column to a different demographic subgroup and refetch it.
+  async function setColumnSubgroup(colId: string, subgroup: string) {
+    const col = columns.find((c) => c.id === colId);
+    if (!col || col.kind !== "data" || col.subgroup === subgroup) return;
+    if (
+      columns.some(
+        (c) =>
+          c.kind === "data" &&
+          c.id !== colId &&
+          c.metric.code === col.metric.code &&
+          c.year === col.year &&
+          c.subgroup === subgroup,
+      )
+    )
+      return; // that metric/year/subgroup is already a column
+    setColumns((cs) =>
+      cs.map((c) => (c.id === colId ? { ...(c as DataColumn), subgroup, values: {} } : c)),
+    );
+    setLoading((s) => new Set(s).add(colId));
+    const vals = await getColumnValues(col.metric.code, col.year, subgroup);
+    const map: Record<number, number | null> = {};
+    for (const v of vals) map[v.entityId] = v.value;
+    setColumns((cs) => cs.map((c) => (c.id === colId ? { ...(c as DataColumn), values: map } : c)));
+    setLoading((s) => {
+      const n = new Set(s);
+      n.delete(colId);
       return n;
     });
   }
@@ -498,7 +544,7 @@ export function Workshop({
       groupFilter,
       columns: columns.map((c) =>
         c.kind === "data"
-          ? { id: c.id, kind: "data", metric: c.metric, year: c.year }
+          ? { id: c.id, kind: "data", metric: c.metric, year: c.year, subgroup: c.subgroup }
           : c,
       ),
     };
@@ -511,7 +557,7 @@ export function Workshop({
     });
     await Promise.all(
       cols.map(async (c) => {
-        const vals = await getColumnValues(c.metric.code, c.year);
+        const vals = await getColumnValues(c.metric.code, c.year, c.subgroup);
         const map: Record<number, number | null> = {};
         for (const v of vals) map[v.entityId] = v.value;
         setColumns((cs) => cs.map((x) => (x.id === c.id ? { ...(x as DataColumn), values: map } : x)));
@@ -534,7 +580,14 @@ export function Workshop({
     setGroupFilter(v.groupFilter);
     const cols: Column[] = v.columns.map((c) =>
       c.kind === "data"
-        ? { id: c.id, kind: "data", metric: c.metric, year: c.year, values: {} }
+        ? {
+            id: c.id,
+            kind: "data",
+            metric: c.metric,
+            year: c.year,
+            subgroup: c.subgroup ?? ALL_STUDENTS,
+            values: {},
+          }
         : c,
     );
     setColumns(cols);
@@ -916,7 +969,31 @@ export function Workshop({
           />
         )}
 
-        {ctx && <SortMenu ctx={ctx} view={viewMode} applySort={applySort} clearSorts={clearSorts} onEdit={(id) => { setCalcDialog({ editId: id }); setCtx(null); }} collapseAll={() => { collapseAll(); setCtx(null); }} expandAll={() => { expandAll(); setCtx(null); }} />}
+        {ctx && (
+          <SortMenu
+            ctx={ctx}
+            view={viewMode}
+            applySort={applySort}
+            clearSorts={clearSorts}
+            onEdit={(id) => {
+              setCalcDialog({ editId: id });
+              setCtx(null);
+            }}
+            onSubgroup={() => {
+              const col = columnsById[ctx.key];
+              if (col?.kind === "data") setSubgroupCol(col);
+              setCtx(null);
+            }}
+            collapseAll={() => {
+              collapseAll();
+              setCtx(null);
+            }}
+            expandAll={() => {
+              expandAll();
+              setCtx(null);
+            }}
+          />
+        )}
       </div>
 
       <DragOverlay>
@@ -971,7 +1048,92 @@ export function Workshop({
           onClose={() => setViewDialog(false)}
         />
       )}
+
+      {subgroupCol && (
+        <SubgroupDialog
+          column={subgroupCol}
+          onPick={(sg) => {
+            void setColumnSubgroup(subgroupCol.id, sg);
+            setSubgroupCol(null);
+          }}
+          onClose={() => setSubgroupCol(null)}
+        />
+      )}
     </>
+  );
+}
+
+// ── choose a demographic subgroup for a data column ──
+function SubgroupDialog({
+  column,
+  onPick,
+  onClose,
+}: {
+  column: DataColumn;
+  onPick: (subgroup: string) => void;
+  onClose: () => void;
+}) {
+  const [subgroups, setSubgroups] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    getMetricSubgroups(column.metric.code, column.year).then((s) => {
+      if (live) setSubgroups(s);
+    });
+    return () => {
+      live = false;
+    };
+  }, [column.metric.code, column.year]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Demographic subgroup</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Slice <span className="font-medium">{column.metric.name}</span> ({column.year}) by a
+          demographic group. Only groups with data for this metric are listed.
+        </p>
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+          {subgroups === null ? (
+            <p className="text-sm text-slate-400">Loading…</p>
+          ) : subgroups.length <= 1 ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+              This metric isn&apos;t broken down by demographics — only “All Students” is available.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {subgroups.map((sg) => {
+                const active = sg === column.subgroup;
+                return (
+                  <button
+                    key={sg}
+                    onClick={() => onPick(sg)}
+                    className={`block w-full rounded-lg px-3 py-1.5 text-left text-sm ${
+                      active
+                        ? "bg-indigo-600 text-white"
+                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {sg}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1077,6 +1239,7 @@ function SortMenu({
   applySort,
   clearSorts,
   onEdit,
+  onSubgroup,
   collapseAll,
   expandAll,
 }: {
@@ -1085,6 +1248,7 @@ function SortMenu({
   applySort: (level: "district" | "school", key: string, dir: "asc" | "desc", add: boolean) => void;
   clearSorts: () => void;
   onEdit: (id: string) => void;
+  onSubgroup: () => void;
   collapseAll: () => void;
   expandAll: () => void;
 }) {
@@ -1111,6 +1275,12 @@ function SortMenu({
       {ctx.kind === "calc" && ctx.calcId && (
         <>
           <Item onClick={() => onEdit(ctx.calcId!)}>Edit calculated field…</Item>
+          <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+        </>
+      )}
+      {ctx.kind === "data" && (
+        <>
+          <Item onClick={onSubgroup}>Choose demographic…</Item>
           <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
         </>
       )}
