@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guards";
+import { DeleteForm } from "@/app/(app)/_components/delete-form";
 import { deleteView, renameView } from "@/lib/views/actions";
 import { getUserViews } from "@/lib/views/queries";
 
@@ -10,7 +11,13 @@ export default async function ViewsPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Saved Views</h1>
+        <Link
+          href="/"
+          className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          ← Dashboard
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Saved Views</h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
           Full{" "}
           <Link href="/workshop" className="text-indigo-600 hover:underline dark:text-indigo-400">
@@ -59,15 +66,11 @@ export default async function ViewsPage() {
                 {v.columnCount} column{v.columnCount === 1 ? "" : "s"} ·{" "}
                 {v.updatedAt.toLocaleDateString()}
               </span>
-              <form action={deleteView}>
-                <input type="hidden" name="id" value={v.id} />
-                <button
-                  type="submit"
-                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
-                >
-                  Delete
-                </button>
-              </form>
+              <DeleteForm
+                action={deleteView}
+                id={v.id}
+                confirmText={`Delete the view “${v.name}”? This can't be undone.`}
+              />
             </div>
           ))}
         </div>

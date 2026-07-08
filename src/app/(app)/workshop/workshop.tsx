@@ -722,6 +722,11 @@ export function Workshop({
   // Fixed height keeps buttons and selects the same size in the filter row.
   const btn = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 
+  // With no explicit sort on a level, rows fall back to A→Z by name — surface
+  // that default in the name column header.
+  const nameSortsByDefault =
+    districtSort.length === 0 || (viewMode === "both" && schoolSort.length === 0);
+
   return (
     <>
     <DndContext
@@ -938,7 +943,16 @@ export function Workshop({
                       className="sticky left-[86px] top-0 z-30 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
                     >
                       School / District{" "}
-                      <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
+                      {sortLabel("name") ? (
+                        <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
+                      ) : nameSortsByDefault ? (
+                        <span
+                          className="font-normal text-slate-400"
+                          title="Default sort: name A→Z"
+                        >
+                          A→Z
+                        </span>
+                      ) : null}
                     </th>
                     {columns.map((col) => (
                       <ColumnHeader
