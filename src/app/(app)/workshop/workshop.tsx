@@ -68,9 +68,13 @@ function exportCsv(header: (string | number)[], data: (string | number)[][]) {
   const csv = [header, ...data].map((r) => r.map(esc).join(",")).join("\n");
   downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "data-workshop.csv");
 }
-function exportExcel(header: (string | number)[], data: (string | number)[][]) {
-  const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>${tableHtml(header, data)}</body></html>`;
-  downloadBlob(new Blob([html], { type: "application/vnd.ms-excel" }), "data-workshop.xls");
+async function exportExcel(header: (string | number)[], data: (string | number)[][]) {
+  const writeXlsxFile = (await import("write-excel-file/browser")).default;
+  const headerRow = header.map((h) => ({ value: String(h), fontWeight: "bold", type: String }));
+  const rows = data.map((r) =>
+    r.map((c) => (typeof c === "number" ? { type: Number, value: c } : c === "" ? null : { type: String, value: String(c) })),
+  );
+  await writeXlsxFile([headerRow, ...rows] as never).toFile("data-workshop.xlsx");
 }
 function exportPdf(header: (string | number)[], data: (string | number)[][]) {
   const w = window.open("", "_blank");

@@ -342,13 +342,6 @@ export function Visualizer({
             { label: "PNG", onClick: () => exportImage("png") },
           ]}
         />
-        <button
-          onClick={() => setShowJson((v) => !v)}
-          className={showJson ? iconBtnActive : iconBtn}
-          title={showJson ? "Hide spec" : "Edit spec (JSON)"}
-        >
-          <Icon name="spec" />
-        </button>
         {saveMsg && <span className="text-sm text-slate-500 dark:text-slate-400">{saveMsg}</span>}
       </div>
 
@@ -501,7 +494,15 @@ export function Visualizer({
         </aside>
 
         {/* CENTER — canvas */}
-        <section className="flex min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <section className="relative flex min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          {/* spec toggle, top-right of the graph (replaces vega's export menu) */}
+          <button
+            onClick={() => setShowJson((v) => !v)}
+            className={`absolute right-2 top-2 z-10 ${showJson ? iconBtnActive : iconBtn}`}
+            title={showJson ? "Back to chart" : "Edit spec (JSON)"}
+          >
+            <Icon name="spec" />
+          </button>
           {showJson ? (
             <div className="flex min-h-0 flex-1 flex-col gap-2">
               <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} spellCheck={false} className="min-h-0 flex-1 rounded-lg border border-slate-300 bg-slate-50 p-3 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />

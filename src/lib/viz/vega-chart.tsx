@@ -71,7 +71,7 @@ export function VegaChart({
         const embed = (await import("vega-embed")).default;
         const res = await embed(el, toVegaLite(spec, rows) as never, {
           renderer: "svg",
-          actions: { export: true, source: false, compiled: false, editor: false },
+          actions: false,
           config: themeConfig(spec.theme) as never,
         });
         if (cancelled) {
