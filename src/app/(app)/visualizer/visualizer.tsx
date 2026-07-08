@@ -236,6 +236,9 @@ export function Visualizer({
         weights: c.weights,
         asPercent: c.asPercent,
         refEntityId: c.refEntityId ?? null,
+        direction: c.direction,
+        refMode: c.refMode,
+        refValue: c.refValue ?? null,
       }));
     const calcRefs = new Set(calc.flatMap((c) => c.sourceIds));
 

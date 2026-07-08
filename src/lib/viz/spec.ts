@@ -34,7 +34,11 @@ export const entitySourceSchema = z.object({
 });
 export type EntitySource = z.infer<typeof entitySourceSchema>;
 
-export const CALC_TYPES = ["avg", "change", "avgchange", "rank", "similarity"] as const;
+export const CALC_TYPES = [
+  "avg", "wavg", "sum", "min", "max", "spread", "difference", "ratio",
+  "change", "avgchange", "cagr", "slope", "zscore", "ordinal", "index", "gap",
+  "rank", "similarity",
+] as const;
 export type CalcType = (typeof CALC_TYPES)[number];
 
 /** A calculated field derived from other fields (mirrors the workshop calc engine). */
@@ -46,6 +50,9 @@ export const calcFieldSchema = z.object({
   weights: z.record(z.string(), z.number()).default({}),
   asPercent: z.boolean().default(false),
   refEntityId: z.number().nullish(),
+  direction: z.enum(["asc", "desc"]).optional(),
+  refMode: z.enum(["mean", "entity", "value"]).optional(),
+  refValue: z.number().nullish(),
 });
 export type CalcFieldSpec = z.infer<typeof calcFieldSchema>;
 

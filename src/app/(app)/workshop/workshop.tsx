@@ -26,6 +26,7 @@ import { CalcDialog, type CalcConfig } from "./calc-dialog";
 import {
   ALL_STUDENTS,
   CALC_LABELS,
+  WEIGHTED_CALCS,
   compareBySortKeys,
   computeCalc,
   formatCalc,
@@ -344,7 +345,7 @@ export function Workshop({
     });
 
     // Build calculated columns, translating handles to real source ids.
-    const CALC_TYPES = new Set<CalcType>(["avg", "change", "avgchange", "rank", "similarity"]);
+    const CALC_TYPES = new Set<CalcType>(Object.keys(CALC_LABELS) as CalcType[]);
     if (Array.isArray(s.calc)) {
       (s.calc as Record<string, unknown>[]).forEach((c, i) => {
         const type = String(c.type ?? "") as CalcType;
@@ -363,8 +364,8 @@ export function Workshop({
             if (gid && typeof w === "number") weights[gid] = w;
           }
         }
-        // Rank / similarity need weights — default to equal (summing to 100).
-        if ((type === "rank" || type === "similarity") && Object.keys(weights).length === 0) {
+        // Weighted fields (rank/similarity/index/wavg) need weights — default to equal (summing to 100).
+        if (WEIGHTED_CALCS.includes(type) && Object.keys(weights).length === 0) {
           const base = Math.floor(100 / sourceIds.length);
           sourceIds.forEach((sid) => (weights[sid] = base));
           weights[sourceIds[0]] += 100 - base * sourceIds.length;
@@ -372,8 +373,22 @@ export function Workshop({
 
         const refName = typeof c.refDistrict === "string" ? c.refDistrict.toLowerCase() : "";
         const namedRef = refName ? (entities.find((e) => e.name.toLowerCase() === refName)?.id ?? null) : null;
-        // Similarity needs a reference entity; default to the user's home district.
-        const refEntityId = type === "similarity" ? (namedRef ?? homeDistrictId) : null;
+        // ordinal rank direction (golf = asc / low wins; basketball = desc / high wins).
+        const direction: "asc" | "desc" | undefined =
+          type === "ordinal" ? (c.direction === "asc" ? "asc" : "desc") : undefined;
+        // gap reference mode: mean of shown rows, a named entity, or a fixed value.
+        let refMode: "mean" | "entity" | "value" | undefined;
+        let refValue: number | null = null;
+        if (type === "gap") {
+          const rm = String(c.refMode ?? "");
+          refMode = rm === "entity" || rm === "value" ? rm : "mean";
+          if (refMode === "value" && typeof c.refValue === "number") refValue = c.refValue;
+        }
+        // similarity + gap-entity need a reference entity; default to the home district.
+        const refEntityId =
+          type === "similarity" || (type === "gap" && refMode === "entity")
+            ? (namedRef ?? homeDistrictId)
+            : null;
         calcCols.push({
           id: `calc-ai${stamp}-${i}`,
           kind: "calc",
@@ -383,6 +398,9 @@ export function Workshop({
           weights,
           asPercent: c.asPercent === true,
           refEntityId,
+          direction,
+          refMode,
+          refValue,
         });
       });
     }
@@ -1607,6 +1625,9 @@ export function Workshop({
                   weights: editingCalc.weights,
                   asPercent: editingCalc.asPercent,
                   refEntityId: editingCalc.refEntityId ?? null,
+                  direction: editingCalc.direction,
+                  refMode: editingCalc.refMode,
+                  refValue: editingCalc.refValue ?? null,
                 }
               : undefined
           }

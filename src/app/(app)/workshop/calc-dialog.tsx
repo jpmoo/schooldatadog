@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "@/components/icon";
-import { CALC_LABELS, type CalcType } from "./columns";
+import { CALC_LABELS, WEIGHTED_CALCS, type CalcType } from "./columns";
 
 export type CalcConfig = {
   calcType: CalcType;
@@ -27,6 +27,9 @@ export type CalcConfig = {
   weights: Record<string, number>;
   asPercent: boolean;
   refEntityId: number | null;
+  direction?: "asc" | "desc";
+  refMode?: "mean" | "entity" | "value";
+  refValue?: number | null;
 };
 
 type SourceOption = { id: string; label: string };
@@ -127,6 +130,9 @@ export function CalcDialog({
   const [refEntityId, setRefEntityId] = useState<number | null>(
     initial?.refEntityId ?? defaultRefId ?? null,
   );
+  const [direction, setDirection] = useState<"asc" | "desc">(initial?.direction ?? "desc");
+  const [refMode, setRefMode] = useState<"mean" | "entity" | "value">(initial?.refMode ?? "mean");
+  const [refValue, setRefValue] = useState<string>(initial?.refValue != null ? String(initial.refValue) : "");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -146,7 +152,10 @@ export function CalcDialog({
     });
 
   const isSimilarity = calcType === "similarity";
-  const showWeight = calcType === "rank" || isSimilarity;
+  const isOrdinal = calcType === "ordinal";
+  const isGap = calcType === "gap";
+  const needsTwo = calcType === "difference" || calcType === "ratio";
+  const showWeight = WEIGHTED_CALCS.includes(calcType);
 
   // Even-split the weights whenever the *set* of weighted columns changes
   // (adding or removing a column re-equalizes, replacing any custom weights).
@@ -191,13 +200,19 @@ export function CalcDialog({
   }
 
   const isChange = calcType === "change" || calcType === "avgchange";
-  const enoughCols = selectedInOrder.length >= (isChange ? 2 : 1);
+  const isSeries = calcType === "cagr" || calcType === "slope";
+  const singleCol = isOrdinal || isGap || calcType === "zscore";
+  const minCols = needsTwo ? 2 : singleCol ? 1 : isChange || isSeries ? 2 : 1;
+  const enoughCols = selectedInOrder.length >= minCols;
   const weightSum = selectedInOrder.reduce((a, s) => a + (weights[s.id] ?? 0), 0);
+  const refValNum = Number(refValue);
   const canSubmit =
     enoughCols &&
     name.trim().length > 0 &&
     (!isSimilarity || refEntityId != null) &&
-    (!showWeight || weightSum === 100); // weighted fields must total 100%
+    (!showWeight || weightSum === 100) && // weighted fields must total 100%
+    (!isGap || refMode !== "entity" || refEntityId != null) &&
+    (!isGap || refMode !== "value" || (refValue.trim() !== "" && !Number.isNaN(refValNum)));
 
   const inputCls =
     "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
@@ -253,6 +268,46 @@ export function CalcDialog({
               (values are standardized first, so different scales are comparable).
             </span>
           </label>
+        )}
+
+        {isOrdinal && (
+          <label className="mt-4 flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Rank so that</span>
+            <select value={direction} onChange={(e) => setDirection(e.target.value as "asc" | "desc")} className={inputCls}>
+              <option value="desc">Highest value is rank 1 (e.g. best score)</option>
+              <option value="asc">Lowest value is rank 1 (e.g. lowest cost)</option>
+            </select>
+            <span className="text-xs text-slate-400">Ranks each row 1, 2, 3… by the first selected column.</span>
+          </label>
+        )}
+
+        {isGap && (
+          <div className="mt-4 flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Compare against</span>
+            <select value={refMode} onChange={(e) => setRefMode(e.target.value as "mean" | "entity" | "value")} className={inputCls}>
+              <option value="mean">The average of the shown rows</option>
+              <option value="entity">A specific district</option>
+              <option value="value">A target value</option>
+            </select>
+            {refMode === "entity" && (
+              <select value={refEntityId ?? ""} onChange={(e) => setRefEntityId(e.target.value ? Number(e.target.value) : null)} className={inputCls}>
+                <option value="">Choose a district…</option>
+                {entities.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+              </select>
+            )}
+            {refMode === "value" && (
+              <input type="number" step="any" value={refValue} onChange={(e) => setRefValue(e.target.value)} placeholder="Target number" className={inputCls} />
+            )}
+            <span className="text-xs text-slate-400">
+              Each row shows its first column minus this reference (positive = above, negative = below).
+            </span>
+          </div>
+        )}
+
+        {needsTwo && (
+          <p className="mt-3 text-xs text-slate-400">
+            Uses the first two columns, in order: {calcType === "difference" ? "first − second" : "first ÷ second"}. Drag to reorder below.
+          </p>
         )}
 
         {isChange && (
@@ -375,7 +430,10 @@ export function CalcDialog({
                 sourceIds: selectedInOrder.map((s) => s.id),
                 weights,
                 asPercent: isChange ? asPercent : false,
-                refEntityId: isSimilarity ? refEntityId : null,
+                refEntityId: isSimilarity ? refEntityId : isGap && refMode === "entity" ? refEntityId : null,
+                direction: isOrdinal ? direction : undefined,
+                refMode: isGap ? refMode : undefined,
+                refValue: isGap && refMode === "value" ? refValNum : null,
               })
             }
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"

@@ -1,6 +1,24 @@
 import type { MetricLite } from "@/lib/workshop/types";
 
-export type CalcType = "avg" | "change" | "avgchange" | "rank" | "similarity";
+export type CalcType =
+  | "avg"
+  | "wavg"
+  | "sum"
+  | "min"
+  | "max"
+  | "spread"
+  | "difference"
+  | "ratio"
+  | "change"
+  | "avgchange"
+  | "cagr"
+  | "slope"
+  | "zscore"
+  | "ordinal"
+  | "index"
+  | "gap"
+  | "rank"
+  | "similarity";
 
 export const ALL_STUDENTS = "All Students";
 
@@ -21,18 +39,37 @@ export type CalcColumn = {
   sourceIds: string[];
   weights: Record<string, number>;
   asPercent: boolean; // change / avgchange: show as % change instead of raw
-  refEntityId?: number | null; // similarity: entity every row is compared against
+  refEntityId?: number | null; // similarity / gap(entity): entity compared against
+  direction?: "asc" | "desc"; // ordinal: is a low value (asc) or high value (desc) rank 1
+  refMode?: "mean" | "entity" | "value"; // gap: what to measure the gap against
+  refValue?: number | null; // gap(value): the target number
 };
 
 export type Column = DataColumn | CalcColumn;
 
 export const CALC_LABELS: Record<CalcType, string> = {
   avg: "Average of selected columns",
+  wavg: "Weighted average of selected columns",
+  sum: "Sum of selected columns",
+  min: "Minimum of selected columns",
+  max: "Maximum of selected columns",
+  spread: "Spread (max − min) of selected columns",
+  difference: "Difference (first − second column)",
+  ratio: "Ratio (first ÷ second column)",
   change: "Change across selected columns (first → last)",
   avgchange: "Average change, column to column",
+  cagr: "Annual growth rate across years",
+  slope: "Trend slope across years",
+  zscore: "Z-score (standardized)",
+  ordinal: "Rank position (1, 2, 3…)",
+  index: "Composite index 0–100 (weighted)",
+  gap: "Gap to a reference",
   rank: "Percentile ranking (weighted)",
   similarity: "Similarity to a district (weighted)",
 };
+
+/** Calc types whose weights matter. */
+export const WEIGHTED_CALCS: CalcType[] = ["wavg", "index", "rank", "similarity"];
 
 /** A sort level is an ordered list of keys (Excel-style multi-column sort). */
 export type SortKey = { key: string; dir: "asc" | "desc" }; // key = column id or "name"
@@ -161,27 +198,170 @@ export function computeCalc(
     return out;
   }
 
+  // Z-score: standardize the first source across the visible set.
+  if (calc.calcType === "zscore") {
+    const s = sources[0];
+    const vals = visibleEntityIds.map((id) => dataVal(s, id)).filter((v): v is number => v !== null);
+    const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    const std = Math.sqrt(vals.length ? vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length : 0);
+    for (const id of visibleEntityIds) {
+      const v = dataVal(s, id);
+      out[id] = v === null || std === 0 ? null : (v - mean) / std;
+    }
+    return out;
+  }
+
+  // Ordinal rank: 1 = best. "desc" = high value is best, "asc" = low value is best.
+  if (calc.calcType === "ordinal") {
+    const s = sources[0];
+    const desc = calc.direction !== "asc";
+    for (const id of visibleEntityIds) {
+      const v = dataVal(s, id);
+      if (v === null) {
+        out[id] = null;
+        continue;
+      }
+      let better = 0;
+      for (const oid of visibleEntityIds) {
+        const ov = dataVal(s, oid);
+        if (ov === null) continue;
+        if (desc ? ov > v : ov < v) better += 1;
+      }
+      out[id] = better + 1;
+    }
+    return out;
+  }
+
+  // Composite index: min-max normalize each source to 0-100, weighted average.
+  if (calc.calcType === "index") {
+    const norm: Record<string, Record<number, number>> = {};
+    for (const s of sources) {
+      const vals = visibleEntityIds.map((id) => dataVal(s, id)).filter((v): v is number => v !== null);
+      const lo = vals.length ? Math.min(...vals) : 0;
+      const hi = vals.length ? Math.max(...vals) : 0;
+      const map: Record<number, number> = {};
+      for (const id of visibleEntityIds) {
+        const v = dataVal(s, id);
+        if (v === null) continue;
+        map[id] = hi > lo ? ((v - lo) / (hi - lo)) * 100 : 50;
+      }
+      norm[s.id] = map;
+    }
+    for (const id of visibleEntityIds) {
+      let acc = 0, wsum = 0, any = false;
+      for (const s of sources) {
+        const nv = norm[s.id][id];
+        if (nv === undefined) continue;
+        const w = calc.weights[s.id] ?? 1;
+        acc += nv * w;
+        wsum += w;
+        any = true;
+      }
+      out[id] = any && wsum > 0 ? acc / wsum : null;
+    }
+    return out;
+  }
+
+  // Gap-to-reference: precompute the reference value for the first source.
+  let gapRef: number | null = null;
+  if (calc.calcType === "gap") {
+    const s = sources[0];
+    const mode = calc.refMode ?? "mean";
+    if (mode === "value") gapRef = typeof calc.refValue === "number" ? calc.refValue : null;
+    else if (mode === "entity") gapRef = calc.refEntityId != null ? dataVal(s, calc.refEntityId) : null;
+    else {
+      const vals = visibleEntityIds.map((id) => dataVal(s, id)).filter((v): v is number => v !== null);
+      gapRef = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    }
+  }
+
   for (const id of visibleEntityIds) {
     const series = sources.map((s) => dataVal(s, id));
     const nums = series.filter((v): v is number => v !== null);
-    if (calc.calcType === "avg") {
-      out[id] = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-    } else if (calc.calcType === "change") {
-      const first = series[0], last = series[series.length - 1];
-      if (first === null || last === null) out[id] = null;
-      else if (calc.asPercent) out[id] = first === 0 ? null : ((last - first) / first) * 100;
-      else out[id] = last - first;
-    } else {
-      // avgchange
-      const diffs: number[] = [];
-      for (let i = 1; i < series.length; i++) {
-        const a = series[i - 1], b = series[i];
-        if (a === null || b === null) continue;
-        if (calc.asPercent) {
-          if (a !== 0) diffs.push(((b - a) / a) * 100);
-        } else diffs.push(b - a);
+    const a0 = series[0] ?? null;
+    const b0 = series[1] ?? null;
+    switch (calc.calcType) {
+      case "avg":
+        out[id] = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+        break;
+      case "sum":
+        out[id] = nums.length ? nums.reduce((a, b) => a + b, 0) : null;
+        break;
+      case "min":
+        out[id] = nums.length ? Math.min(...nums) : null;
+        break;
+      case "max":
+        out[id] = nums.length ? Math.max(...nums) : null;
+        break;
+      case "spread":
+        out[id] = nums.length ? Math.max(...nums) - Math.min(...nums) : null;
+        break;
+      case "difference":
+        out[id] = a0 === null || b0 === null ? null : a0 - b0;
+        break;
+      case "ratio":
+        out[id] = a0 === null || b0 === null || b0 === 0 ? null : a0 / b0;
+        break;
+      case "wavg": {
+        let acc = 0, wsum = 0;
+        sources.forEach((s, i) => {
+          const v = series[i];
+          if (v === null) return;
+          const w = calc.weights[s.id] ?? 1;
+          acc += v * w;
+          wsum += w;
+        });
+        out[id] = wsum > 0 ? acc / wsum : null;
+        break;
       }
-      out[id] = diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
+      case "gap":
+        out[id] = a0 === null || gapRef === null ? null : a0 - gapRef;
+        break;
+      case "cagr": {
+        const first = series[0], last = series[series.length - 1], n = series.length - 1;
+        out[id] =
+          first === null || last === null || n < 1 || first <= 0 || last <= 0
+            ? null
+            : (Math.pow(last / first, 1 / n) - 1) * 100;
+        break;
+      }
+      case "slope": {
+        const pts: [number, number][] = [];
+        series.forEach((v, i) => v !== null && pts.push([i, v]));
+        if (pts.length < 2) {
+          out[id] = null;
+          break;
+        }
+        const n = pts.length;
+        const sx = pts.reduce((a, [x]) => a + x, 0);
+        const sy = pts.reduce((a, [, y]) => a + y, 0);
+        const sxx = pts.reduce((a, [x]) => a + x * x, 0);
+        const sxy = pts.reduce((a, [x, y]) => a + x * y, 0);
+        const denom = n * sxx - sx * sx;
+        out[id] = denom === 0 ? null : (n * sxy - sx * sy) / denom;
+        break;
+      }
+      case "change": {
+        const first = series[0], last = series[series.length - 1];
+        if (first === null || last === null) out[id] = null;
+        else if (calc.asPercent) out[id] = first === 0 ? null : ((last - first) / first) * 100;
+        else out[id] = last - first;
+        break;
+      }
+      case "avgchange": {
+        const diffs: number[] = [];
+        for (let i = 1; i < series.length; i++) {
+          const a = series[i - 1], b = series[i];
+          if (a === null || b === null) continue;
+          if (calc.asPercent) {
+            if (a !== 0) diffs.push(((b - a) / a) * 100);
+          } else diffs.push(b - a);
+        }
+        out[id] = diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
+        break;
+      }
+      default:
+        out[id] = null;
     }
   }
   return out;
@@ -207,11 +387,31 @@ export function formatValue(
 export function formatCalc(col: CalcColumn, v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   const round = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  if (col.calcType === "rank") return round(v);
-  if (col.calcType === "similarity") return `${round(v)}%`;
-  if ((col.calcType === "change" || col.calcType === "avgchange") && col.asPercent)
-    return `${v > 0 ? "+" : ""}${round(v)}%`;
-  return `${v > 0 && (col.calcType === "change" || col.calcType === "avgchange") ? "+" : ""}${round(v)}`;
+  const round2 = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const signed = (n: number) => `${n > 0 ? "+" : ""}${round(n)}`;
+  switch (col.calcType) {
+    case "rank":
+    case "index":
+      return round(v);
+    case "similarity":
+      return `${round(v)}%`;
+    case "ordinal":
+      return Math.round(v).toLocaleString();
+    case "cagr":
+      return `${v > 0 ? "+" : ""}${round(v)}%`;
+    case "zscore":
+    case "ratio":
+    case "slope":
+      return round2(v);
+    case "change":
+    case "avgchange":
+      return col.asPercent ? `${v > 0 ? "+" : ""}${round(v)}%` : signed(v);
+    case "difference":
+    case "gap":
+      return signed(v);
+    default:
+      return round(v);
+  }
 }
 
 /** Compare two entities by an ordered list of sort keys; nulls sort last. */

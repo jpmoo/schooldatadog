@@ -87,14 +87,26 @@ A "sheet" object looks like:
   "sort": { "metric": "<code>", "year": "2023-24", "direction": "desc" | "asc" } | null
 }
 
-Calculated fields (the "calc" array) derive new columns from the data columns:
+Calculated fields (the "calc" array) derive new columns from the data columns. Pick "type":
 - "avg" — average of the source columns.
+- "wavg" — weighted average (use "weights", a per-source 0-100 map that sums to 100).
+- "sum" — sum of the source columns.
+- "min" / "max" — smallest / largest of the source columns.
+- "spread" — max minus min across the sources.
+- "difference" — first source minus second (uses the first two columns, in order).
+- "ratio" — first source divided by second.
 - "change" — change across the sources, first to last (set "asPercent": true for percent change).
 - "avgchange" — average column-to-column change (supports "asPercent").
+- "cagr" — compound annual growth rate across the sources, as a percent (needs 2+ columns, first & last positive).
+- "slope" — linear-trend slope across the sources (needs 2+ columns).
+- "zscore" — standardized score of the first source (how many std-devs from the mean of the shown rows).
+- "ordinal" — ordinal rank (1, 2, 3…) by the first source. Set "direction":"desc" so the highest value is rank 1 (best score), or "asc" so the lowest value is rank 1 (lowest cost).
+- "index" — 0-100 index blending the sources (weighted; each source min-max normalized first). Use "weights".
+- "gap" — first source minus a reference. Set "refMode":"mean" (average of shown rows), "entity" (a district, with "refDistrict"), or "value" (a fixed number, with "refValue").
 - "rank" — weighted percentile ranking of the sources (use "weights", a per-source 0-100 map that sums to 100).
 - "similarity" — weighted similarity of each row to one reference district (needs "refDistrict" plus "weights").
 Each calc references data columns by their "id" handle, so give the columns you need an "id".
-When the user asks for a similarity, ranking, average, or change field, you MUST actually add it to the "calc" array — do not just describe it in "reply". For a similarity field, also include every data column it compares in "columns" and reference them in the calc's "sources".
+When the user asks for any calculated field, you MUST actually add it to the "calc" array — do not just describe it in "reply". For a similarity/gap-entity field, also include every data column it uses in "columns" and reference them in the calc's "sources".
 
 Rules:
 - "columns" REPLACES all columns (data + calc). List every data column you want, left to right, each a metric code + year + subgroup + optional "id". Add "calc" fields after.
