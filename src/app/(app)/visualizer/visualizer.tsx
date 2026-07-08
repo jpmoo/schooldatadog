@@ -170,8 +170,16 @@ export function Visualizer({
     }
     setLastBase(null);
     setEntScope(st.viewMode === "schools" ? "school" : st.viewMode === "districts" ? "district" : "mixed");
+    // Seed a default encoding so a chart draws immediately on import — the old
+    // encoding referenced the previous fields, so replace it entirely.
+    const firstField = fields[0]?.id ?? calc[0]?.id;
+    const encoding: ChartSpec["encoding"] = firstField
+      ? { x: { field: "entityName", type: "nominal", sort: "-y" }, y: { field: firstField, type: "quantitative" } }
+      : {};
     setSpec((s) => ({
       ...s,
+      mark: typeof s.mark === "string" ? s.mark : "bar",
+      encoding,
       data: {
         entities: { ids, level: st.viewMode === "schools" ? "school" : st.viewMode === "both" ? "both" : "district", source: { kind: "view", id: v.id, name: v.name } },
         fields,
