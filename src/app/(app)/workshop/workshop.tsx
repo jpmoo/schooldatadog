@@ -868,34 +868,36 @@ export function Workshop({
               <table className="border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr>
+                    {/* select-all — narrow, no title */}
+                    <th className="sticky left-0 top-0 z-30 w-[40px] border-b border-slate-200 bg-slate-100 px-2 py-2 text-center dark:border-slate-800 dark:bg-slate-800">
+                      <input
+                        type="checkbox"
+                        title="Select all shown"
+                        checked={rows.length > 0 && rows.every((r) => selected.has(r.entity.id))}
+                        onChange={(ev) =>
+                          setSelected((prev) => {
+                            const n = new Set(prev);
+                            for (const r of rows) {
+                              if (ev.target.checked) n.add(r.entity.id);
+                              else n.delete(r.entity.id);
+                            }
+                            return n;
+                          })
+                        }
+                      />
+                    </th>
+                    {/* rank — narrow, no title */}
+                    <th className="sticky left-[40px] top-0 z-30 w-[48px] border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800" />
+                    {/* school / district name */}
                     <th
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setCtx({ key: "name", kind: "name", x: e.clientX, y: e.clientY });
                       }}
-                      className="sticky left-0 top-0 z-20 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
+                      className="sticky left-[88px] top-0 z-30 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
                     >
-                      <span className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          title="Select all shown"
-                          checked={rows.length > 0 && rows.every((r) => selected.has(r.entity.id))}
-                          onChange={(ev) =>
-                            setSelected((prev) => {
-                              const n = new Set(prev);
-                              for (const r of rows) {
-                                if (ev.target.checked) n.add(r.entity.id);
-                                else n.delete(r.entity.id);
-                              }
-                              return n;
-                            })
-                          }
-                        />
-                        <span>
-                          School / District{" "}
-                          <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
-                        </span>
-                      </span>
+                      School / District{" "}
+                      <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
                     </th>
                     {columns.map((col) => (
                       <ColumnHeader
@@ -918,21 +920,29 @@ export function Workshop({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ entity: e, type, collapsible }) => {
+                  {rows.map(({ entity: e, type, collapsible }, i) => {
                     const isHome = e.id === homeDistrictId;
+                    const stickyBg = isHome
+                      ? "bg-indigo-50 dark:bg-indigo-950/40"
+                      : "bg-white dark:bg-slate-950";
                     return (
                       <tr key={e.id} data-eid={e.id} className={isHome ? "bg-indigo-50 dark:bg-indigo-950/40" : ""}>
-                        <td
-                          className={`sticky left-0 z-10 min-w-[240px] border-b border-slate-100 px-3 py-1.5 dark:border-slate-800 ${
-                            isHome ? "bg-indigo-50 dark:bg-indigo-950/40" : "bg-white dark:bg-slate-950"
-                          } ${type === "school" ? "pl-8" : ""}`}
-                        >
+                        <td className={`sticky left-0 z-20 w-[40px] border-b border-slate-100 px-2 py-1.5 text-center dark:border-slate-800 ${stickyBg}`}>
                           <input
                             type="checkbox"
-                            className="mr-2 align-middle"
+                            className="align-middle"
                             checked={selected.has(e.id)}
                             onChange={() => toggleSelected(e.id)}
                           />
+                        </td>
+                        <td className={`sticky left-[40px] z-20 w-[48px] border-b border-slate-100 px-1 py-1.5 text-center text-xs tabular-nums text-slate-400 dark:border-slate-800 ${stickyBg}`}>
+                          {i + 1}
+                        </td>
+                        <td
+                          className={`sticky left-[88px] z-20 min-w-[240px] border-b border-slate-100 px-3 py-1.5 dark:border-slate-800 ${stickyBg} ${
+                            type === "school" ? "pl-8" : ""
+                          }`}
+                        >
                           {collapsible && (
                             <button
                               onClick={() =>
