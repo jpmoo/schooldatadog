@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 export type IconName =
+  | "apply"
   | "calcualtedField"
   | "clear"
   | "dashboard"

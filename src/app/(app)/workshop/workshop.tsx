@@ -1569,8 +1569,9 @@ function SubgroupDialog({
           </button>
           <button
             onClick={() => onApply([...checked])}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
           >
+            <Icon name="apply" className="h-4 w-4" />
             Apply
           </button>
         </div>

@@ -617,7 +617,7 @@ export function Visualizer({
             <div className="flex min-h-0 flex-1 flex-col gap-2">
               <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} spellCheck={false} className="min-h-0 flex-1 rounded-lg border border-slate-300 bg-slate-50 p-3 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
               {jsonErr && <p className="text-sm text-red-600">{jsonErr}</p>}
-              <button onClick={applyJson} className="self-start rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">Apply spec</button>
+              <button onClick={applyJson} className="flex items-center gap-1.5 self-start rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"><Icon name="apply" className="h-4 w-4" />Apply spec</button>
             </div>
           ) : canRender ? (
             <div className="rounded-lg bg-white p-2">
