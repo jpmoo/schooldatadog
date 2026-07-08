@@ -1053,7 +1053,8 @@ export function Visualizer({
                     value={(def.title as string | undefined) ?? axisLabels[def.field] ?? def.field}
                     onChange={(e) => setChannelTitle(ch, e.target.value)}
                     className={`${input} w-full text-xs`}
-                    title="Axis / legend label"
+                    style={{ color: def.title == null ? "#94a3b8" : undefined }}
+                    title={def.title == null ? "Default label (edit to override)" : "Axis / legend label"}
                   />
                 ) : (
                   hint && <span className="text-[11px] text-slate-400">{hint}</span>
@@ -1152,6 +1153,8 @@ export function Visualizer({
                           onChange={(e) => setAxisNum(ax, key, e.target.value)}
                           placeholder="auto"
                           className={`${input} w-full`}
+                          style={{ color: set === "" ? "#94a3b8" : undefined }}
+                          title={set === "" ? "Default (edit to override)" : undefined}
                         />
                       </label>
                     );
