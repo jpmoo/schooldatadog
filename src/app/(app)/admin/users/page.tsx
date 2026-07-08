@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { entities, users } from "@/db/schema";
 import { getDistricts } from "@/lib/admin/districts";
+import { impersonate } from "@/lib/admin/user-actions";
 import { requireAdmin } from "@/lib/auth/guards";
 import { CreateUserForm } from "./create-user-form";
 
@@ -31,7 +32,7 @@ export default async function UsersPage() {
           href="/admin"
           className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
         >
-          ← System Settings
+          ← Administration
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
           Users
@@ -80,12 +81,25 @@ export default async function UsersPage() {
                   {u.districtName || <span className="text-slate-400">—</span>}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <Link
-                    href={`/admin/users/${u.id}`}
-                    className="font-medium text-indigo-600 hover:underline"
-                  >
-                    Edit
-                  </Link>
+                  <div className="flex items-center justify-end gap-3">
+                    {u.id !== admin.id && (
+                      <form action={impersonate.bind(null, u.id)}>
+                        <button
+                          type="submit"
+                          className="font-medium text-indigo-600 hover:underline"
+                          title={`Log in as ${u.name || u.email}`}
+                        >
+                          Log in as
+                        </button>
+                      </form>
+                    )}
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="font-medium text-indigo-600 hover:underline"
+                    >
+                      Edit
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}

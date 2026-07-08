@@ -6,8 +6,10 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { entities, users } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { requireAdmin } from "@/lib/auth/guards";
 import { hashPassword } from "@/lib/auth/password";
+import { createSession, destroySession, getImpersonatorId } from "@/lib/auth/session";
 
 export type UserFormState = { error?: string; ok?: boolean } | undefined;
 
@@ -164,4 +166,30 @@ export async function deleteUser(userId: number): Promise<void> {
 
   await db.delete(users).where(eq(users.id, userId));
   revalidatePath("/admin/users");
+}
+
+/** Admin: start impersonating another user ("Log in as"). */
+export async function impersonate(userId: number): Promise<void> {
+  const admin = await requireAdmin();
+  if (userId === admin.id) redirect("/");
+  const [target] = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!target) redirect("/admin/users");
+  await destroySession();
+  await createSession(target.id, admin.id);
+  await logActivity(admin.id, "impersonate.start", "user", target.name ?? target.email);
+  redirect("/");
+}
+
+/** Return from an impersonated session to the admin's own account. */
+export async function stopImpersonating(): Promise<void> {
+  const impersonatorId = await getImpersonatorId();
+  if (impersonatorId == null) redirect("/");
+  await destroySession();
+  await createSession(impersonatorId);
+  await logActivity(impersonatorId, "impersonate.stop");
+  redirect("/admin/users");
 }

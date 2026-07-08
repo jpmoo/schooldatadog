@@ -14,6 +14,8 @@ export const ACTION_LABELS: Record<string, string> = {
   "group.load": "Applied a group",
   "chart.save": "Saved a visualization",
   "chart.load": "Opened a visualization",
+  "impersonate.start": "Logged in as a user",
+  "impersonate.stop": "Returned to admin",
 };
 
 /**

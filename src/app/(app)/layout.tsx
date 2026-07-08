@@ -6,7 +6,9 @@ import { DashboardLink } from "@/app/(app)/_components/dashboard-link";
 import { db } from "@/db";
 import { entities, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/guards";
+import { getImpersonatorId } from "@/lib/auth/session";
 import { logout } from "@/lib/auth/actions";
+import { stopImpersonating } from "@/lib/admin/user-actions";
 
 export default async function AppLayout({
   children,
@@ -22,9 +24,26 @@ export default async function AppLayout({
     .where(eq(users.id, user.id))
     .limit(1);
   const homeDistrict = home?.name ?? null;
+  const impersonating = (await getImpersonatorId()) != null;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+      {impersonating && (
+        <div className="flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-sm font-medium text-white">
+          <span>
+            You are logged in as {user.name || user.email}.
+          </span>
+          <form action={stopImpersonating}>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 rounded-md bg-white/20 px-3 py-1 font-semibold hover:bg-white/30"
+            >
+              <Icon name="no" className="h-4 w-4" />
+              Return to your admin account
+            </button>
+          </form>
+        </div>
+      )}
       <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto flex h-14 max-w-[100rem] items-center justify-between px-4">
           <nav className="flex items-center gap-3">

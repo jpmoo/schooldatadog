@@ -26,7 +26,7 @@ export type SessionUser = {
 };
 
 export type SessionResult =
-  | { session: { id: string; expiresAt: Date }; user: SessionUser }
+  | { session: { id: string; expiresAt: Date; impersonatorId: number | null }; user: SessionUser }
   | { session: null; user: null };
 
 /** SHA-256 of the opaque token; this is what we persist as the session id. */
@@ -38,12 +38,12 @@ function hashToken(token: string): string {
  * Create a new session for `userId` and set the httpOnly cookie.
  * Must be called from a Server Action or Route Handler (it writes a cookie).
  */
-export async function createSession(userId: number): Promise<void> {
+export async function createSession(userId: number, impersonatorId: number | null = null): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   const id = hashToken(token);
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
-  await db.insert(sessions).values({ id, userId, expiresAt });
+  await db.insert(sessions).values({ id, userId, impersonatorId, expiresAt });
 
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
@@ -70,6 +70,7 @@ export const getCurrentSession = cache(async (): Promise<SessionResult> => {
     .select({
       sessionId: sessions.id,
       expiresAt: sessions.expiresAt,
+      impersonatorId: sessions.impersonatorId,
       userId: users.id,
       email: users.email,
       name: users.name,
@@ -89,7 +90,7 @@ export const getCurrentSession = cache(async (): Promise<SessionResult> => {
   }
 
   return {
-    session: { id: row.sessionId, expiresAt: row.expiresAt },
+    session: { id: row.sessionId, expiresAt: row.expiresAt, impersonatorId: row.impersonatorId },
     user: {
       id: row.userId,
       email: row.email,
@@ -98,6 +99,12 @@ export const getCurrentSession = cache(async (): Promise<SessionResult> => {
     },
   };
 });
+
+/** If the current session is an admin impersonating someone, the admin's id. */
+export async function getImpersonatorId(): Promise<number | null> {
+  const { session } = await getCurrentSession();
+  return session?.impersonatorId ?? null;
+}
 
 /** Invalidate the current session and clear the cookie. */
 export async function destroySession(): Promise<void> {

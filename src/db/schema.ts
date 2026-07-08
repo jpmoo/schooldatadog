@@ -68,6 +68,11 @@ export const sessions = pgTable("sessions", {
   userId: integer("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  // When an admin is impersonating (logged in as) another user, this holds the
+  // admin's id so they can return to their own account.
+  impersonatorId: integer("impersonator_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
