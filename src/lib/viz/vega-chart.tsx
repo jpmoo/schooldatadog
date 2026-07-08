@@ -58,9 +58,9 @@ function toVegaLite(
   const hideLegend = spec.showLegend === false;
   const LEGEND_CHANNELS = new Set(["color", "size", "shape", "opacity", "fill", "stroke"]);
 
-  // Resolve our custom axis controls (axisMin/axisMax/majorStep/minorStep) on a
-  // plain quantitative x/y axis into a scale domain + explicit tick positions.
-  type AxisMeta = { lo?: number; hi?: number; major: number; minor: number; dMin?: number; dMax?: number };
+  // Resolve our custom axis controls (axisMin/axisMax/interval) on a plain
+  // quantitative x/y axis into a scale domain + explicit, evenly-spaced ticks.
+  type AxisMeta = { lo?: number; hi?: number; interval: number; dMin?: number; dMax?: number };
   const axisMeta: Record<string, AxisMeta> = {};
   if (!faceted) {
     for (const ax of ["x", "y"] as const) {
@@ -68,8 +68,7 @@ function toVegaLite(
       if (d.type !== "quantitative" || "bin" in d) continue;
       const dMin = typeof d.axisMin === "number" ? d.axisMin : undefined;
       const dMax = typeof d.axisMax === "number" ? d.axisMax : undefined;
-      const major = typeof d.majorStep === "number" ? d.majorStep : 0;
-      const minor = typeof d.minorStep === "number" ? d.minorStep : 0;
+      const interval = typeof d.interval === "number" ? d.interval : 0;
       let dataLo: number | undefined;
       let dataHi: number | undefined;
       if (typeof d.field === "string" && !("aggregate" in d)) {
@@ -80,7 +79,7 @@ function toVegaLite(
           dataHi = Math.max(...nums);
         }
       }
-      axisMeta[ax] = { lo: dMin ?? dataLo, hi: dMax ?? dataHi, major, minor, dMin, dMax };
+      axisMeta[ax] = { lo: dMin ?? dataLo, hi: dMax ?? dataHi, interval, dMin, dMax };
     }
   }
 
@@ -92,8 +91,7 @@ function toVegaLite(
       const rest = { ...d };
       delete rest.axisMin;
       delete rest.axisMax;
-      delete rest.majorStep;
-      delete rest.minorStep;
+      delete rest.interval;
       const title = (typeof d.title === "string" ? d.title : undefined) ?? friendly;
 
       const meta = axisMeta[ch];
@@ -109,8 +107,8 @@ function toVegaLite(
           if (meta.dMin !== undefined) scale.domainMin = meta.dMin;
           if (meta.dMax !== undefined) scale.domainMax = meta.dMax;
         }
-        if (meta.major > 0 && meta.lo !== undefined && meta.hi !== undefined && meta.hi > meta.lo) {
-          const vals = enumerateTicks(meta.lo, meta.hi, meta.major);
+        if (meta.interval > 0 && meta.lo !== undefined && meta.hi !== undefined && meta.hi > meta.lo) {
+          const vals = enumerateTicks(meta.lo, meta.hi, meta.interval);
           if (vals.length) {
             axis = axis ?? {};
             axis.values = vals;
@@ -161,35 +159,7 @@ function toVegaLite(
     extraTransform.push({ calculate: "datum.homeDistrict === 'My district' ? 1 : 0", as: "_home" });
   }
 
-  // Minor gridlines: Vega-Lite has no native minor ticks, so draw evenly-spaced
-  // rules between the (explicit or data-derived) axis bounds, sharing the scale.
-  const minorLayers: Record<string, unknown>[] = [];
-  if (!faceted) {
-    for (const ax of ["x", "y"] as const) {
-      const meta = axisMeta[ax];
-      if (meta && meta.minor > 0 && meta.lo !== undefined && meta.hi !== undefined && meta.hi > meta.lo) {
-        const vals = enumerateTicks(meta.lo, meta.hi, meta.minor);
-        const domain: Record<string, unknown> = {};
-        if (meta.dMin !== undefined) domain.domainMin = meta.dMin;
-        if (meta.dMax !== undefined) domain.domainMax = meta.dMax;
-        minorLayers.push({
-          data: { values: vals.map((v) => ({ _g: v })) },
-          mark: { type: "rule", stroke: "#cbd5e1", strokeWidth: 0.4, opacity: 0.6 },
-          encoding: {
-            [ax]: {
-              field: "_g",
-              type: "quantitative",
-              axis: null,
-              ...(Object.keys(domain).length ? { scale: domain } : {}),
-            },
-          },
-        });
-      }
-    }
-  }
-
-  const base = { mark: spec.mark ?? "bar", encoding };
-  const chartLayer = minorLayers.length ? { layer: [...minorLayers, base] } : base;
+  const chartLayer = { mark: spec.mark ?? "bar", encoding };
 
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",

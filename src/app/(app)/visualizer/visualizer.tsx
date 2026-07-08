@@ -512,43 +512,28 @@ export function Visualizer({
 
   // Axis scale/tick controls, stored as our own numeric keys on the channel
   // (axisMin/axisMax/majorStep/minorStep) and translated to a Vega-Lite scale +
-  // explicit tick values by VegaChart. `key` "major" maps to a histogram's bin
-  // width when the axis is binned. Empty clears; only positive steps are kept.
-  const setAxisNum = (ch: string, key: "axisMin" | "axisMax" | "major" | "minor", raw: string) =>
+  // explicit tick values by VegaChart. "interval" must be positive; empty clears.
+  const setAxisNum = (ch: string, key: "axisMin" | "axisMax" | "interval", raw: string) =>
     setSpec((s) => {
       const cur = s.encoding?.[ch] as Record<string, unknown> | undefined;
       if (!cur) return s;
       const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
       const next: Record<string, unknown> = { ...cur };
       const n = Number(raw);
-      const empty = raw.trim() === "" || Number.isNaN(n);
-      const positiveOnly = key === "major" || key === "minor";
-      const ok = !empty && (!positiveOnly || n > 0);
-      const binned = cur.bin !== undefined && cur.bin !== false;
-
-      if (key === "major" && binned) {
-        const bin = typeof cur.bin === "object" ? { ...(cur.bin as Record<string, unknown>) } : {};
-        if (ok) bin.step = n;
-        else delete bin.step;
-        next.bin = Object.keys(bin).length ? bin : true;
-      } else {
-        const propKey = key === "major" ? "majorStep" : key === "minor" ? "minorStep" : key;
-        if (ok) next[propKey] = n;
-        else delete next[propKey];
-      }
+      const ok = raw.trim() !== "" && !Number.isNaN(n) && (key !== "interval" || n > 0);
+      if (ok) next[key] = n;
+      else delete next[key];
       enc[ch] = next;
       return { ...s, encoding: enc as ChartSpec["encoding"] };
     });
-  const axisNumOf = (ch: string, key: "axisMin" | "axisMax" | "major" | "minor") => {
-    const cur = spec.encoding?.[ch] as Record<string, unknown> | undefined;
-    if (!cur) return "";
-    if (key === "major" && typeof cur.bin === "object") {
-      const step = (cur.bin as Record<string, unknown>).step;
-      return typeof step === "number" ? step : "";
-    }
-    const propKey = key === "major" ? "majorStep" : key === "minor" ? "minorStep" : key;
-    const v = cur[propKey];
+  const axisNumOf = (ch: string, key: "axisMin" | "axisMax" | "interval") => {
+    const v = (spec.encoding?.[ch] as Record<string, unknown> | undefined)?.[key];
     return typeof v === "number" ? v : "";
+  };
+  // Min/Max/Interval only make sense on a continuous (quantitative, non-binned) axis.
+  const isNumericAxis = (ch: string) => {
+    const c = spec.encoding?.[ch] as Record<string, unknown> | undefined;
+    return !!c && c.type === "quantitative" && !("bin" in c);
   };
 
   // "Chart type" is the mark, plus a "histogram" preset (binned x + count y).
@@ -1046,16 +1031,15 @@ export function Visualizer({
             </label>
           )}
           {(["x", "y"] as const).map((ax) =>
-            spec.encoding?.[ax]?.field || spec.encoding?.[ax]?.aggregate ? (
+            isNumericAxis(ax) ? (
               <div key={ax} className="flex flex-col gap-1">
                 <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">{ax} axis</span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {([
-                    ["axisMin", "Min", "auto", "Lowest value on the axis"],
-                    ["axisMax", "Max", "auto", "Highest value on the axis"],
-                    ["major", "Major", "auto", "Spacing of labelled ticks / gridlines (bin width on a histogram)"],
-                    ["minor", "Minor", "none", "Spacing of finer, unlabelled gridlines between majors"],
-                  ] as const).map(([key, label, ph, tip]) => (
+                    ["axisMin", "Min", "auto"],
+                    ["axisMax", "Max", "auto"],
+                    ["interval", "Interval", "auto"],
+                  ] as const).map(([key, label, ph]) => (
                     <label key={key} className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
                       {label}
                       <input
@@ -1065,11 +1049,13 @@ export function Visualizer({
                         onChange={(e) => setAxisNum(ax, key, e.target.value)}
                         placeholder={ph}
                         className={`${input} w-full`}
-                        title={tip}
                       />
                     </label>
                   ))}
                 </div>
+                <span className="text-[11px] text-slate-400">
+                  Set Min, Max and the spacing between ticks (e.g. 0 / 20 / 5 → 0, 5, 10, 15, 20).
+                </span>
               </div>
             ) : null,
           )}
