@@ -89,6 +89,10 @@ function toVegaLite(
     }
   }
 
+  // When the entities come from a saved group/view, that name titles whatever
+  // axis/legend shows the entities — overriding any custom label there.
+  const entitySourceName = spec.data.entities.source?.name;
+
   const encoding = Object.fromEntries(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
@@ -98,7 +102,10 @@ function toVegaLite(
       delete rest.axisMin;
       delete rest.axisMax;
       delete rest.interval;
-      const title = (typeof d.title === "string" ? d.title : undefined) ?? friendly;
+      const title =
+        d.field === "entityName" && entitySourceName
+          ? entitySourceName
+          : (typeof d.title === "string" ? d.title : undefined) ?? friendly;
 
       const meta = axisMeta[ch];
       let axis = (rest.axis && typeof rest.axis === "object" ? { ...(rest.axis as object) } : undefined) as

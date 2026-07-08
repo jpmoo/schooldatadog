@@ -866,7 +866,11 @@ export function Visualizer({
           </select>
           <label className="flex items-center gap-2 text-sm">
             <span className="text-slate-500 dark:text-slate-400">Saved Group</span>
-            <select value="" onChange={(e) => e.target.value && applyGroup(e.target.value)} className={`${input} flex-1`}>
+            <select
+              value={provenance?.kind === "group" ? String(provenance.id) : ""}
+              onChange={(e) => e.target.value && applyGroup(e.target.value)}
+              className={`${input} flex-1`}
+            >
               <option value="">{groups.length ? "Choose a group…" : "No saved groups"}</option>
               {groups.map((g) => (<option key={g.id} value={g.id}>{g.name} ({g.entityIds.length})</option>))}
             </select>
@@ -874,7 +878,7 @@ export function Visualizer({
           <label className="flex items-center gap-2 text-sm">
             <span className="text-slate-500 dark:text-slate-400">Saved View</span>
             <select
-              value=""
+              value={provenance?.kind === "view" ? String(provenance.id) : ""}
               onChange={(e) => {
                 const v = views.find((x) => String(x.id) === e.target.value);
                 if (v) void importView(v);
