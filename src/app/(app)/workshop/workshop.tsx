@@ -863,7 +863,7 @@ export function Workshop({
 
   if (!mounted) {
     return (
-      <div className="flex h-[calc(100vh-8rem)] items-center justify-center text-sm text-slate-400">
+      <div className="flex h-[calc(100vh-6.5rem)] items-center justify-center text-sm text-slate-400">
         Loading the workshop…
       </div>
     );
@@ -889,7 +889,7 @@ export function Workshop({
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragging(null)}
     >
-      <div className="flex h-[calc(100vh-8rem)] gap-3" onClick={() => ctx && setCtx(null)}>
+      <div className="flex h-[calc(100vh-6.5rem)] gap-3" onClick={() => ctx && setCtx(null)}>
         {/* LEFT — metrics panel, collapsible to a slim strip on the left edge */}
         {paneHidden ? (
           <button
@@ -1067,7 +1067,8 @@ export function Workshop({
             />
             <span className="ml-auto text-xs text-slate-400">
               {viewName ? <span className="mr-2 text-indigo-500">“{viewName}”</span> : null}
-              {rows.length.toLocaleString()} rows · {columns.length} column{columns.length === 1 ? "" : "s"}
+              {paneHidden &&
+                `${rows.length.toLocaleString()} rows · ${columns.length} column${columns.length === 1 ? "" : "s"}`}
             </span>
           </div>
 

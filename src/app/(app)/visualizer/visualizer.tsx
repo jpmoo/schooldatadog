@@ -325,7 +325,7 @@ export function Visualizer({
     "flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-500 bg-indigo-600 text-white";
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col gap-2">
+    <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-2">
       {/* top bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Chart name" className={`${input} min-w-[220px] flex-1`} />
