@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { Icon } from "@/components/icon";
-import { requireAdmin } from "@/lib/auth/guards";
 import { ACTION_LABELS, getActivityLog, getLogFilterOptions } from "@/lib/activity/log";
+import { saveTimezone } from "@/lib/admin/user-actions";
+import { requireAdmin } from "@/lib/auth/guards";
+import { getTimezone } from "@/lib/settings";
 
 const asInt = (v: string | undefined) => {
   const n = Number(v);
   return v && Number.isInteger(n) ? n : undefined;
 };
+
+const supportedValuesOf = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+const TIMEZONES: string[] = supportedValuesOf
+  ? supportedValuesOf("timeZone")
+  : ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"];
 
 export default async function AdminLogPage({
   searchParams,
@@ -20,8 +27,13 @@ export default async function AdminLogPage({
     districtId: asInt(sp.district),
     action: sp.action || undefined,
   };
-  const [rows, options] = await Promise.all([getActivityLog(filters), getLogFilterOptions()]);
+  const [rows, options, timezone] = await Promise.all([
+    getActivityLog(filters),
+    getLogFilterOptions(),
+    getTimezone(),
+  ]);
   const hasFilter = !!(filters.userId || filters.districtId || filters.action);
+  const fmt = (d: Date) => d.toLocaleString("en-US", { timeZone: timezone });
 
   const selectCls =
     "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
@@ -40,6 +52,24 @@ export default async function AdminLogPage({
           Sign-ins, sign-outs, and saves/loads of views, groups, and visualizations.
         </p>
       </div>
+
+      <form action={saveTimezone} className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+          Display timezone
+          <select name="timezone" defaultValue={timezone} className={selectCls}>
+            {TIMEZONES.map((tz) => (
+              <option key={tz} value={tz}>{tz}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="submit"
+          className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <Icon name="saveViewOrGroup" className="h-4 w-4" />
+          Save timezone
+        </button>
+      </form>
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -106,7 +136,7 @@ export default async function AdminLogPage({
               rows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
                   <td className="whitespace-nowrap px-4 py-2 text-slate-500 dark:text-slate-400">
-                    {r.createdAt.toLocaleString()}
+                    {fmt(r.createdAt)}
                   </td>
                   <td className="px-4 py-2 text-slate-800 dark:text-slate-100">
                     {r.userName || r.userEmail || <span className="text-slate-400">(deleted user)</span>}

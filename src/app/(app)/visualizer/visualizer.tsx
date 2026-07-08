@@ -600,7 +600,9 @@ export function Visualizer({
     if (typeof field !== "string" || "aggregate" in (c ?? {})) return { lo: "", hi: "" };
     const nums = rows.map((r) => r[field]).filter((v): v is number => typeof v === "number");
     if (!nums.length) return { lo: "", hi: "" };
-    return { lo: Math.min(...nums, 0), hi: Math.max(...nums) };
+    const mk = typeof spec.mark === "string" ? spec.mark : "bar";
+    const lo = mk === "bar" || mk === "area" ? Math.min(...nums, 0) : Math.min(...nums);
+    return { lo, hi: Math.max(...nums) };
   };
 
   // Histogram bucketing on the x axis: a fixed range size (bin.step) OR a target

@@ -60,6 +60,9 @@ function toVegaLite(
   const faceted = "column" in enc || "row" in enc || "facet" in enc;
   const hideLegend = spec.showLegend === false;
   const LEGEND_CHANNELS = new Set(["color", "size", "shape", "opacity", "fill", "stroke"]);
+  const markStr = typeof spec.mark === "string" ? spec.mark : "bar";
+  // Only bar/area anchor their value axis at 0; scatter/line use the data range.
+  const zeroBased = markStr === "bar" || markStr === "area";
 
   // Resolve our custom axis controls (axisMin/axisMax/interval) on a plain
   // quantitative x/y axis into a scale domain + explicit, evenly-spaced ticks.
@@ -78,7 +81,7 @@ function toVegaLite(
         const field = d.field;
         const nums = rows.map((r) => r[field]).filter((v): v is number => typeof v === "number");
         if (nums.length) {
-          dataLo = Math.min(...nums, 0);
+          dataLo = zeroBased ? Math.min(...nums, 0) : Math.min(...nums);
           dataHi = Math.max(...nums);
         }
       }
@@ -138,7 +141,6 @@ function toVegaLite(
   // The default fill for un-highlighted marks — the theme's primary colour, so a
   // "recolour" highlight leaves everyone else looking normal (not faded/grey).
   const themePrimary = spec.theme === "print" ? "#0f172a" : "#6366f1";
-  const markStr = typeof spec.mark === "string" ? spec.mark : "bar";
   const hasHomeCond = (o: unknown) => {
     const c = (o as Record<string, unknown> | undefined)?.condition as Record<string, unknown> | undefined;
     return typeof c?.test === "string" && c.test.includes("homeDistrict");

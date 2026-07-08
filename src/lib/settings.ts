@@ -10,6 +10,8 @@ export const SETTINGS = {
   ollamaModel: "ollama_model",
   /** Model used to generate embeddings for semantic search. */
   ollamaEmbeddingModel: "ollama_embedding_model",
+  /** IANA timezone used to display timestamps (e.g. the activity log). */
+  timezone: "timezone",
 } as const;
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -37,6 +39,11 @@ export async function setSetting(
         updatedByUserId: updatedByUserId ?? null,
       },
     });
+}
+
+/** The configured display timezone, defaulting to Eastern (NY). */
+export async function getTimezone(): Promise<string> {
+  return (await getSetting(SETTINGS.timezone)) || "America/New_York";
 }
 
 export type OllamaConfig = {

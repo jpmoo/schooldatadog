@@ -10,6 +10,7 @@ import { logActivity } from "@/lib/activity/log";
 import { requireAdmin } from "@/lib/auth/guards";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession, destroySession, getImpersonatorId } from "@/lib/auth/session";
+import { setSetting, SETTINGS } from "@/lib/settings";
 
 export type UserFormState = { error?: string; ok?: boolean } | undefined;
 
@@ -182,6 +183,20 @@ export async function impersonate(userId: number): Promise<void> {
   await createSession(target.id, admin.id);
   await logActivity(admin.id, "impersonate.start", "user", target.name ?? target.email);
   redirect("/");
+}
+
+/** Admin: set the IANA timezone used to display timestamps. */
+export async function saveTimezone(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const tz = String(formData.get("timezone") ?? "").trim();
+  try {
+    // Throws for an unknown timezone.
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+  } catch {
+    return;
+  }
+  await setSetting(SETTINGS.timezone, tz, admin.id);
+  revalidatePath("/admin/log");
 }
 
 /** Return from an impersonated session to the admin's own account. */
