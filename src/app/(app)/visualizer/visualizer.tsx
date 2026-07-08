@@ -142,43 +142,65 @@ export function Visualizer({
         return !hidden.has(e.id);
       })
       .map((e) => e.id);
+    const calc: CalcFieldSpec[] = st.columns
+      .filter((c) => c.kind === "calc")
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        calcType: c.calcType,
+        sourceIds: c.sourceIds,
+        weights: c.weights,
+        asPercent: c.asPercent,
+        refEntityId: c.refEntityId ?? null,
+      }));
+    const calcRefs = new Set(calc.flatMap((c) => c.sourceIds));
+
+    // Collapse same-metric/subgroup columns (across years) into one multi-year
+    // field so they can be a line over time. Columns a calc field references
+    // stay separate so the calc keeps working.
     const fields: FieldSpec[] = [];
-    const calc: CalcFieldSpec[] = [];
+    const merged = new Map<string, FieldSpec>();
+    const fieldFrom = (c: (typeof st.columns)[number] & { kind: "data" }, years: string[]): FieldSpec => ({
+      id: c.id,
+      metric: c.metric.code,
+      metricName: c.metric.name,
+      years,
+      subgroup: c.subgroup ?? "All Students",
+      label: c.metric.name,
+      dataType: c.metric.dataType,
+      unit: c.metric.unit,
+    });
     for (const c of st.columns) {
-      if (c.kind === "data") {
-        fields.push({
-          id: c.id,
-          metric: c.metric.code,
-          metricName: c.metric.name,
-          years: [c.year],
-          subgroup: c.subgroup ?? "All Students",
-          label: c.metric.name,
-          dataType: c.metric.dataType,
-          unit: c.metric.unit,
-        });
-      } else {
-        calc.push({
-          id: c.id,
-          name: c.name,
-          calcType: c.calcType,
-          sourceIds: c.sourceIds,
-          weights: c.weights,
-          asPercent: c.asPercent,
-          refEntityId: c.refEntityId ?? null,
-        });
+      if (c.kind !== "data") continue;
+      if (calcRefs.has(c.id)) {
+        fields.push(fieldFrom(c, [c.year]));
+        continue;
       }
+      const key = `${c.metric.code}::${c.subgroup ?? "All Students"}`;
+      const cur = merged.get(key);
+      if (cur) cur.years = [...new Set([...cur.years, c.year])].sort();
+      else merged.set(key, fieldFrom(c, [c.year]));
     }
+    fields.push(...merged.values());
+
     setLastBase(null);
     setEntScope(st.viewMode === "schools" ? "school" : st.viewMode === "districts" ? "district" : "mixed");
-    // Seed a default encoding so a chart draws immediately on import — the old
-    // encoding referenced the previous fields, so replace it entirely.
+    // Default encoding so a chart draws on import (old encoding referenced the
+    // previous fields). Multi-year → a line over years, one line per entity.
     const firstField = fields[0]?.id ?? calc[0]?.id;
-    const encoding: ChartSpec["encoding"] = firstField
-      ? { x: { field: "entityName", type: "nominal", sort: "-y" }, y: { field: firstField, type: "quantitative" } }
-      : {};
+    const multiYear = fields.some((f) => f.years.length > 1);
+    const encoding: ChartSpec["encoding"] = !firstField
+      ? {}
+      : multiYear
+        ? {
+            x: { field: "year", type: "ordinal" },
+            y: { field: firstField, type: "quantitative" },
+            color: { field: "entityName", type: "nominal" },
+          }
+        : { x: { field: "entityName", type: "nominal", sort: "-y" }, y: { field: firstField, type: "quantitative" } };
     setSpec((s) => ({
       ...s,
-      mark: typeof s.mark === "string" ? s.mark : "bar",
+      mark: multiYear ? "line" : "bar",
       encoding,
       data: {
         entities: { ids, level: st.viewMode === "schools" ? "school" : st.viewMode === "both" ? "both" : "district", source: { kind: "view", id: v.id, name: v.name } },
