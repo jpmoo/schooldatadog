@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icon";
 import { changeMyPassword } from "@/lib/account/actions";
 
-type AccountUser = { name: string | null; email: string; role: string };
+type AccountUser = { name: string | null; email: string; role: string; homeDistrict?: string | null };
 
 export function AccountMenu({ user }: { user: AccountUser }) {
   const [open, setOpen] = useState(false);
@@ -78,6 +78,12 @@ function AccountModal({ user, onClose }: { user: AccountUser; onClose: () => voi
           <div className="flex justify-between gap-4">
             <dt className="text-slate-500 dark:text-slate-400">Role</dt>
             <dd className="font-medium capitalize text-slate-800 dark:text-slate-100">{user.role}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-slate-500 dark:text-slate-400">Home district</dt>
+            <dd className="font-medium text-slate-800 dark:text-slate-100">
+              {user.homeDistrict || <span className="font-normal text-slate-400">Not set (an admin can set this)</span>}
+            </dd>
           </div>
         </dl>
 

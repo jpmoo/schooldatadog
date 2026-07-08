@@ -7,6 +7,7 @@ export type MetricLite = {
   category: string | null;
   unit: string | null;
   dataType: string;
+  description: string | null;
 };
 
 export type CellValue = { entityId: number; value: number | null };

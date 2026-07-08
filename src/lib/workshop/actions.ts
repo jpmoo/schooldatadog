@@ -90,6 +90,7 @@ export async function searchMetrics(query: string, year?: string): Promise<Metri
       .select({
         id: metrics.id, code: metrics.code, name: metrics.name,
         category: metrics.category, unit: metrics.unit, dataType: metrics.dataType,
+        description: metrics.description,
       })
       .from(metrics)
       .orderBy(asc(metrics.category), asc(metrics.name));
@@ -143,6 +144,7 @@ export async function searchMetrics(query: string, year?: string): Promise<Metri
     .map(({ m }) => ({
       id: m.id, code: m.code, name: m.name,
       category: m.category, unit: m.unit, dataType: m.dataType,
+      description: m.description,
     }));
 }
 

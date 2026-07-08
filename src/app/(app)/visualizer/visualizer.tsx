@@ -59,6 +59,7 @@ export function Visualizer({
   demographicMetrics,
   initialChart,
   homeDistrictId,
+  importViewId = null,
 }: {
   years: string[];
   entities: WorkshopEntity[];
@@ -68,6 +69,7 @@ export function Visualizer({
   demographicMetrics: string[];
   initialChart: { id: number; name: string; spec: ChartSpec } | null;
   homeDistrictId: number | null;
+  importViewId?: number | null;
 }) {
   const entitiesById = useMemo(() => new Map(entities.map((e) => [e.id, e])), [entities]);
   const demoSet = useMemo(() => new Set(demographicMetrics), [demographicMetrics]);
@@ -396,8 +398,12 @@ export function Visualizer({
   }
 
   // A fresh chart starts on "Districts only" — populate that set once on mount.
+  // If arriving via ?view=<id> (e.g. from the workshop), import that view instead.
   useEffect(() => {
-    if (!initialChart) applyBase("districts");
+    if (initialChart) return;
+    const v = importViewId != null ? views.find((x) => x.id === importViewId) : null;
+    if (v) void importView(v);
+    else applyBase("districts");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -652,7 +658,7 @@ export function Visualizer({
   }
   async function save() {
     setSaveMsg(null);
-    const nm = name.trim() || spec.title?.trim() || "Untitled chart";
+    const nm = name.trim() || spec.title?.trim() || "Untitled visualization";
     // Persist the AI conversation alongside the chart so it restores on load.
     const specToSave: ChartSpec = {
       ...spec,
@@ -671,7 +677,7 @@ export function Visualizer({
     const url = kind === "svg" ? await view.toImageURL("svg") : await view.toImageURL("png", 3);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(name || "chart").replace(/\s+/g, "-")}.${kind}`;
+    a.download = `${(name || "visualization").replace(/\s+/g, "-")}.${kind}`;
     a.click();
   }
 
@@ -687,13 +693,13 @@ export function Visualizer({
     <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-2">
       {/* top bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Chart name" className={`${input} min-w-[220px] flex-1`} />
-        <button onClick={save} className={iconBtn} title="Save chart">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Visualization name" className={`${input} min-w-[220px] flex-1`} />
+        <button onClick={save} className={iconBtn} title="Save visualization">
           <Icon name="saveViewOrGroup" />
         </button>
         <IconMenu
           icon="export"
-          title="Export chart (SVG / PNG)"
+          title="Export visualization (SVG / PNG)"
           buttonClassName={iconBtn}
           disabled={!canRender}
           items={[
@@ -783,7 +789,7 @@ export function Visualizer({
           {spec.data.fields.map((f) => (
             <div key={f.id} className="rounded-lg border border-slate-200 p-2 text-sm dark:border-slate-800">
               <div className="flex items-start justify-between gap-1">
-                <span className="font-medium text-slate-700 dark:text-slate-200">{f.label}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200" title={metricByCode.get(f.metric)?.description ?? f.label}>{f.label}</span>
                 <button onClick={() => removeField(f.id)} className="text-slate-300 hover:text-red-500">✕</button>
               </div>
               {demoSet.has(f.metric) && (
@@ -842,7 +848,7 @@ export function Visualizer({
                       {open && (
                         <div className="space-y-1 py-1">
                           {list.map((m) => (
-                            <button key={m.code} onClick={() => addField(m)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-sm hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700">
+                            <button key={m.code} onClick={() => addField(m)} title={m.description ?? m.name} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-sm hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700">
                               <span className="font-medium text-slate-700 dark:text-slate-200">{m.name}</span>
                             </button>
                           ))}
@@ -852,7 +858,7 @@ export function Visualizer({
                   );
                 })
               : metrics.map((m) => (
-                  <button key={m.code} onClick={() => addField(m)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-sm hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700">
+                  <button key={m.code} onClick={() => addField(m)} title={m.description ?? m.name} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-sm hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700">
                     <span className="font-medium text-slate-700 dark:text-slate-200">{m.name}</span>
                     <span className="block text-xs text-slate-400">{m.category}</span>
                   </button>
@@ -874,7 +880,7 @@ export function Visualizer({
             <button
               onClick={() => setShowJson((v) => !v)}
               className={showJson ? iconBtnActive : iconBtn}
-              title={showJson ? "Back to chart" : "Edit spec (JSON)"}
+              title={showJson ? "Back to visualization" : "Edit spec (JSON)"}
             >
               <Icon name="spec" />
             </button>
@@ -981,9 +987,7 @@ export function Visualizer({
           </label>
           {homeDistrictName && (
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600 dark:text-slate-300">
-                Highlight my district <span className="text-slate-400">({homeDistrictName})</span>
-              </span>
+              <span className="text-slate-600 dark:text-slate-300">Highlight my district</span>
               <select value={highlightMode} onChange={(e) => setHighlightMode(e.target.value)} className={input}>
                 <option value="none">None</option>
                 <option value="fade">Fade the others</option>
@@ -1112,7 +1116,7 @@ export function Visualizer({
             />
             {groupSave.err && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{groupSave.err}</p>}
             <div className="mt-6 flex items-center justify-end gap-3">
-              <button onClick={() => setGroupSave(null)} className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">Cancel</button>
+              <button onClick={() => setGroupSave(null)} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Icon name="no" className="h-4 w-4" />Cancel</button>
               <button
                 disabled={!groupSave.name.trim()}
                 onClick={() => void saveGroup(groupSave.name.trim())}
@@ -1134,7 +1138,7 @@ export function Visualizer({
               A group named “{groupConflict.name}” already exists. Overwrite it, or save as new?
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
-              <button onClick={() => setGroupConflict(null)} className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">Cancel</button>
+              <button onClick={() => setGroupConflict(null)} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Icon name="no" className="h-4 w-4" />Cancel</button>
               <button onClick={() => void resolveGroupConflict("new")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Save as new</button>
               <button onClick={() => void resolveGroupConflict("overwrite")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500">Overwrite</button>
             </div>

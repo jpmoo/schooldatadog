@@ -12,11 +12,12 @@ import { Visualizer } from "./visualizer";
 export default async function VisualizerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ chart?: string }>;
+  searchParams: Promise<{ chart?: string; view?: string }>;
 }) {
   const user = await requireUser();
-  const { chart } = await searchParams;
+  const { chart, view } = await searchParams;
   const chartId = chart ? Number(chart) : NaN;
+  const importViewId = view && Number.isInteger(Number(view)) ? Number(view) : null;
 
   const years = await getYears();
   const [entities, initialMetrics, groups, views, demographicMetrics, saved, me] = await Promise.all([
@@ -39,6 +40,7 @@ export default async function VisualizerPage({
       demographicMetrics={demographicMetrics}
       initialChart={saved}
       homeDistrictId={me[0]?.homeDistrictId ?? null}
+      importViewId={importViewId}
     />
   );
 }

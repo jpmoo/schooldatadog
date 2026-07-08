@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -115,7 +116,7 @@ function MetricChip({ metric }: { metric: MetricLite }) {
       className={`cursor-grab rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm active:cursor-grabbing dark:border-slate-700 dark:bg-slate-900 ${
         isDragging ? "opacity-40" : ""
       }`}
-      title={metric.code}
+      title={metric.description || metric.name}
     >
       <div className="font-medium text-slate-800 dark:text-slate-100">{metric.name}</div>
       <div className="text-xs text-slate-400">
@@ -164,11 +165,13 @@ function ColumnHeader({
   const title = col.kind === "data" ? col.metric.name : col.name;
   const sub = col.kind === "data" ? col.year : "calculated";
   const subgroup = col.kind === "data" && col.subgroup !== ALL_STUDENTS ? col.subgroup : null;
+  const hoverTitle = col.kind === "data" ? (col.metric.description ?? col.metric.name) : col.name;
 
   return (
     <th
       ref={setRef}
       data-colid={col.id}
+      title={hoverTitle}
       onContextMenu={(e) => onContext(e, col)}
       className={`sticky top-0 z-10 min-w-[140px] cursor-grab border-b border-l border-slate-200 bg-slate-50 px-3 py-2 text-left align-top dark:border-slate-800 dark:bg-slate-900 ${
         drop.isOver ? "bg-indigo-100 dark:bg-indigo-950" : ""
@@ -273,6 +276,8 @@ export function Workshop({
   const [confirmClear, setConfirmClear] = useState(false);
   const [viewConflict, setViewConflict] = useState<{ name: string; id: number; state: SavedViewState } | null>(null);
   const [groupConflict, setGroupConflict] = useState<{ name: string; id: number; ids: number[] } | null>(null);
+  const [savedViewPrompt, setSavedViewPrompt] = useState<{ id: number; name: string } | null>(null);
+  const router = useRouter();
 
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -936,6 +941,7 @@ export function Workshop({
     if (res.ok) {
       setViewName(res.view.name);
       setViewDialog(false);
+      setSavedViewPrompt({ id: res.view.id, name: res.view.name });
       return { ok: true };
     }
     if ("conflict" in res) {
@@ -950,7 +956,10 @@ export function Workshop({
     const { name, id, state } = viewConflict;
     const res =
       mode === "overwrite" ? await overwriteView(id, state) : await createView(name, state, true);
-    if (res.ok) setViewName(res.view.name);
+    if (res.ok) {
+      setViewName(res.view.name);
+      setSavedViewPrompt({ id: res.view.id, name: res.view.name });
+    }
     setViewConflict(null);
   }
 
@@ -1604,6 +1613,33 @@ export function Workshop({
           onClose={() => setGroupConflict(null)}
         />
       )}
+
+      {savedViewPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSavedViewPrompt(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">View saved</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              “{savedViewPrompt.name}” was saved. Would you like to open it in the Visualizer?
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setSavedViewPrompt(null)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Icon name="no" className="h-4 w-4" />
+                No, stay here
+              </button>
+              <button
+                onClick={() => router.push(`/visualizer?view=${savedViewPrompt.id}`)}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+              >
+                <Icon name="apply" className="h-4 w-4" />
+                Yes, open in Visualizer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1635,8 +1671,9 @@ function OverwriteDialog({
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
+            <Icon name="no" className="h-4 w-4" />
             Cancel
           </button>
           <button
@@ -1684,8 +1721,9 @@ function ConfirmDialog({
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
+            <Icon name="no" className="h-4 w-4" />
             Cancel
           </button>
           <button
@@ -1776,8 +1814,9 @@ function SubgroupDialog({
         <div className="mt-4 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
+            <Icon name="no" className="h-4 w-4" />
             Cancel
           </button>
           <button
@@ -1871,8 +1910,9 @@ function NameDialog({
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
+            <Icon name="no" className="h-4 w-4" />
             Cancel
           </button>
           <button

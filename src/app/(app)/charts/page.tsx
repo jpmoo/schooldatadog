@@ -17,7 +17,7 @@ export default async function ChartsPage() {
           Saved Visualizations
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
-          Charts built in the{" "}
+          Visualizations built in the{" "}
           <Link href="/visualizer" className="text-indigo-600 hover:underline dark:text-indigo-400">
             Visualizer
           </Link>
@@ -27,7 +27,7 @@ export default async function ChartsPage() {
 
       {charts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-          No charts yet. Build one in the <em>Visualizer</em> and click <em>Save chart</em>.
+          No visualizations yet. Build one in the <em>Visualizer</em> and save it.
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -43,7 +43,7 @@ export default async function ChartsPage() {
                 <Icon name="open" className="h-4 w-4" />
                 Open
               </Link>
-              <form action={renameChart} className="flex min-w-0 flex-1 items-center gap-2">
+              <form action={renameChart} className="flex min-w-0 flex-1 items-center gap-3">
                 <input type="hidden" name="id" value={c.id} />
                 <input
                   name="name"
@@ -52,6 +52,9 @@ export default async function ChartsPage() {
                   maxLength={255}
                   className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                 />
+                <span className="whitespace-nowrap text-xs text-slate-400">
+                  Saved {c.updatedAt.toLocaleString()}
+                </span>
                 <button
                   type="submit"
                   className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -60,23 +63,20 @@ export default async function ChartsPage() {
                   Rename
                 </button>
               </form>
-              <span className="text-xs text-slate-400">
-                {c.engine} · {c.updatedAt.toLocaleDateString()}
-              </span>
               <form action={duplicateChart}>
                 <input type="hidden" name="id" value={c.id} />
                 <button
                   type="submit"
                   className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <Icon name="savedItems" className="h-4 w-4" />
+                  <Icon name="duplicate" className="h-4 w-4" />
                   Duplicate
                 </button>
               </form>
               <DeleteForm
                 action={deleteChart}
                 id={c.id}
-                confirmText={`Delete the chart “${c.name}”? This can't be undone.`}
+                confirmText={`Delete the visualization “${c.name}”? This can't be undone.`}
               />
             </div>
           ))}
