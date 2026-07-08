@@ -52,7 +52,7 @@ def _em_assessment(path, table, prefix, subject, school_year):
     }
     return melt_rows(
         df, "ENTITY_CD", "ENTITY_NAME", measures,
-        school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending,
+        school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending, folder_year_only=True,
         subgroup_col="SUBGROUP_NAME",
         dimension_col="ASSESSMENT_NAME", dimension_fn=grade_dimension,
     )
@@ -74,7 +74,7 @@ def _regents(path, school_year):
     }
     return melt_rows(
         df, "ENTITY_CD", "ENTITY_NAME", measures,
-        school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending,
+        school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending, folder_year_only=True,
         subgroup_col="SUBGROUP_NAME",
         dimension_col="SUBJECT", dimension_fn=label_dimension,
     )
@@ -97,7 +97,7 @@ def _expenditures(path, school_year):
         "PUPIL_COUNT_TOT": (_c("src_exp_pupil_count", "Pupil count (for spending)", _EXP_CAT), None),
     }
     return melt_specs(df, "ENTITY_CD", "ENTITY_NAME", school_year, specs,
-                      year_col="YEAR", year_transform=school_year_from_ending)
+                      year_col="YEAR", year_transform=school_year_from_ending, folder_year_only=True)
 
 
 # --- Postsecondary enrollment ----------------------------------------------
@@ -118,7 +118,7 @@ def _postsecondary(path, school_year):
     }
     return melt_rows(
         df, "ENTITY_CD", "ENTITY_NAME", measures,
-        school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending,
+        school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending, folder_year_only=True,
         subgroup_col="SUBGROUP_NAME",
         dimension_col="MEMBERSHIP_DESC", dimension_fn=label_dimension,
     )
@@ -142,7 +142,7 @@ def _absenteeism(path, school_year):
         df = read_table(path, t)
         out += melt_rows(
             df, "ENTITY_CD", "ENTITY_NAME", measures,
-            school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending,
+            school_year=school_year, school_year_col="YEAR", year_transform=school_year_from_ending, folder_year_only=True,
         subgroup_col="SUBGROUP_NAME",
         )
     return out
@@ -163,7 +163,7 @@ def _teacher_quality(path, school_year):
         "PER_PRINC_INEXP": (_p("src_principals_inexperienced_pct", "Inexperienced principals rate", _TQ_CAT), None),
     }
     return melt_specs(df, "ENTITY_CD", "ENTITY_NAME", school_year, specs,
-                      year_col="YEAR", year_transform=school_year_from_ending)
+                      year_col="YEAR", year_transform=school_year_from_ending, folder_year_only=True)
 
 
 def build(path: str, school_year: str, dict_path: str | None = None) -> List[FactRecord]:

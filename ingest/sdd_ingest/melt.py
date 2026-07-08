@@ -32,6 +32,7 @@ def melt_specs(
     specs: ColumnSpecs,
     year_col: Optional[str] = None,
     year_transform: Optional[Callable[[str], Optional[str]]] = None,
+    folder_year_only: bool = False,
 ) -> List[FactRecord]:
     """Melt a wide table into FactRecords.
 
@@ -63,11 +64,15 @@ def melt_specs(
             sy = year_transform(raw_year) if year_transform else str(raw_year).strip()
             if not sy:
                 continue  # unparseable year -> skip row
-            # Don't ingest snapshots newer than the dataset year being processed —
-            # NYSED history files sometimes carry a future, partial year (e.g. a
-            # fall-2025 row in the 2024-25 file). "YYYY-YY" sorts lexicographically.
-            if school_year and sy > school_year:
-                continue
+            if school_year:
+                # folder_year_only: keep only this folder's own year (drops both
+                # older and future snapshots the history file carries). Otherwise
+                # just drop years newer than the folder ("YYYY-YY" sorts lexically).
+                if folder_year_only:
+                    if sy != school_year:
+                        continue
+                elif sy > school_year:
+                    continue
         else:
             sy = school_year
 
@@ -101,6 +106,7 @@ def melt_rows(
     dimension_col: Optional[str] = None,
     dimension_fn: Optional[Callable[[str], Optional[Tuple[str, str]]]] = None,
     dimensions: Optional[List[Tuple[str, Callable[[str], Optional[Tuple[str, str]]]]]] = None,
+    folder_year_only: bool = False,
 ) -> List[FactRecord]:
     """Melt a *row-based* table (NYSED's other common shape).
 
@@ -142,9 +148,14 @@ def melt_rows(
             sy = school_year
         if not sy:
             continue
-        # Skip snapshots newer than the dataset year being processed (see melt_specs).
-        if sy_series is not None and school_year and sy > school_year:
-            continue
+        # Drop snapshots outside the dataset year being processed (see melt_specs):
+        # folder_year_only restricts to the folder's own year, else just future.
+        if sy_series is not None and school_year:
+            if folder_year_only:
+                if sy != school_year:
+                    continue
+            elif sy > school_year:
+                continue
 
         subgroup = canon_subgroup(sub_series.iat[i]) if sub_series is not None else ALL_STUDENTS
 

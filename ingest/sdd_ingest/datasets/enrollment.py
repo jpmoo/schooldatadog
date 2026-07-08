@@ -62,12 +62,12 @@ def _specs():
 
 
 def build(path: str, school_year: str, dict_path: str | None = None) -> List[FactRecord]:
-    # This table carries several fall-year snapshots; derive the school year
-    # per row from YEAR instead of using the folder label.
+    # This table carries several fall-year snapshots; keep only this folder's own
+    # year so adjacent partial years (e.g. 2021-22) don't leak in.
     # (Grade columns are already self-describing, so dict_path is unused here.)
     table = find_table(path, "BEDS Day Enrollment") or "BEDS Day Enrollment"
     df = read_table(path, table)
     return melt_specs(
         df, "ENTITY_CD", "ENTITY_NAME", school_year, _specs(),
-        year_col="YEAR", year_transform=school_year_from_fall,
+        year_col="YEAR", year_transform=school_year_from_fall, folder_year_only=True,
     )

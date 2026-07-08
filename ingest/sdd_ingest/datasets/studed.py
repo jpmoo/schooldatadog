@@ -83,7 +83,7 @@ def build(path: str, school_year: str, dict_path: str | None = None) -> List[Fac
         df = read_table(path, table)
         records += melt_specs(
             df, "ENTITY_CD", name_col, school_year, specs,
-            year_col="YEAR", year_transform=school_year_from_fall,
+            year_col="YEAR", year_transform=school_year_from_fall, folder_year_only=True,
         )
 
     # Average class size — row-based on CLASS_DESCRIPTION.
@@ -95,9 +95,10 @@ def build(path: str, school_year: str, dict_path: str | None = None) -> List[Fac
             entity_cd_col="ENTITY_CD",
             entity_name_col="ENTITY_NAME",
             value_specs={"AVERAGE_CLASS_SIZE": _c("studed_avg_class_size", "Average class size")},
-            school_year=school_year,  # caps the per-row YEAR so future snapshots drop
+            school_year=school_year,
             school_year_col="YEAR",
             year_transform=school_year_from_fall,
+            folder_year_only=True,  # keep only this folder's own year
             dimension_col="CLASS_DESCRIPTION",
             dimension_fn=_class_dim,
         )
