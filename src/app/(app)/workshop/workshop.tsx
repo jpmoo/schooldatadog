@@ -1241,7 +1241,7 @@ export function Workshop({
         )}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {dragging && (
           <div className="rounded-lg border border-indigo-400 bg-white px-3 py-2 text-sm font-medium text-indigo-700 shadow-lg dark:bg-slate-900 dark:text-indigo-300">
             {dragging.label}
