@@ -205,7 +205,10 @@ export function CalcDialog({
   const enoughCols = selectedInOrder.length >= (isChange ? 2 : 1);
   const weightSum = selectedInOrder.reduce((a, s) => a + (weights[s.id] ?? 0), 0);
   const canSubmit =
-    enoughCols && name.trim().length > 0 && (!isSimilarity || refEntityId != null);
+    enoughCols &&
+    name.trim().length > 0 &&
+    (!isSimilarity || refEntityId != null) &&
+    (!showWeight || weightSum === 100); // weighted fields must total 100%
 
   const inputCls =
     "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
