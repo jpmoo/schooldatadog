@@ -317,12 +317,15 @@ export function Workshop({
         if (g) applyGroup(String(g.id));
       }
     }
-    if (!Array.isArray(s.columns)) return;
-
+    const hasCols = Array.isArray(s.columns);
     const stamp = Math.round(performance.now());
+    const dataCols: DataColumn[] = [];
+    const calcCols: CalcColumn[] = [];
+    // Rebuild columns only when the model sends them — so a sort/view-only change
+    // doesn't wipe the table or require the model to re-send everything.
+    if (hasCols) {
     // Build data columns and map every way the AI might reference one (explicit
     // id, positional c1.., 0.., or the metric code) to the real column id.
-    const dataCols: DataColumn[] = [];
     const handleToId = new Map<string, string>();
     const register = (h: string, id: string) => {
       if (h && !handleToId.has(h)) handleToId.set(h, id);
@@ -342,7 +345,6 @@ export function Workshop({
 
     // Build calculated columns, translating handles to real source ids.
     const CALC_TYPES = new Set<CalcType>(["avg", "change", "avgchange", "rank", "similarity"]);
-    const calcCols: CalcColumn[] = [];
     if (Array.isArray(s.calc)) {
       (s.calc as Record<string, unknown>[]).forEach((c, i) => {
         const type = String(c.type ?? "") as CalcType;
@@ -428,22 +430,27 @@ export function Workshop({
       for (const v of vals) map[v.entityId] = v.value;
       setColumns((cs) => cs.map((x) => (x.id === col.id ? { ...(x as DataColumn), values: map } : x)));
     }
+    } // end if (hasCols)
 
+    // Sort against the rebuilt columns, or the current ones if columns weren't sent.
+    const finalCols: Column[] = hasCols ? [...dataCols, ...calcCols] : columns;
     const so = s.sort as Record<string, unknown> | null | undefined;
-    const rankCalc = calcCols.find((c) => c.calcType === "similarity" || c.calcType === "rank");
+    const rankCalc = finalCols.find(
+      (c): c is CalcColumn => c.kind === "calc" && (c.calcType === "similarity" || c.calcType === "rank"),
+    );
     if (so && typeof so === "object") {
       const code = String(so.metric ?? "");
       const yr = typeof so.year === "string" ? so.year : "";
-      const target = dataCols.find((c) => c.metric.code === code && (!yr || c.year === yr));
+      const target = finalCols.find(
+        (c): c is DataColumn => c.kind === "data" && c.metric.code === code && (!yr || c.year === yr),
+      );
       const dir = so.direction === "asc" ? "asc" : "desc";
-      // A named data column, else fall back to the similarity/rank field.
       const key = target?.id ?? rankCalc?.id;
       if (key) {
         applySort("district", key, dir, false);
         applySort("school", key, dir, false);
       }
     } else if (rankCalc && /sort|descend|top|rank/i.test(reply)) {
-      // The model described sorting but didn't emit a sort — rank by similarity.
       applySort("district", rankCalc.id, "desc", false);
       applySort("school", rankCalc.id, "desc", false);
     }

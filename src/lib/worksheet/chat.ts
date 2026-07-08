@@ -101,9 +101,10 @@ Rules:
 - "metric" MUST be a code above; "year"/"subgroup"/"group"/"county"/"refDistrict" MUST be real values from the lists above.
 - "calc" "sources" and "weights" keys MUST be "id"s you defined in "columns".
 - "viewMode":"keep", "county":"keep", "group":"keep" leave those as they are. "county":"all" clears the county filter; "group":"none" clears the group filter.
-- "sort" (optional) sorts the rows by one of your data columns.
+- "sort" (optional) sorts the rows by a column: use that column's metric code (and year). To sort by an existing column, just reference its metric/year — you don't need to resend it.
+If you change the columns, list ALL of them (it replaces the whole table). But to ONLY sort or change the view/county/group, OMIT "columns" entirely to keep the current table — this is much faster than re-listing everything.
 You can also SUGGEST a calculated field in "reply" (describe it) and only add it to "calc" when the user agrees.
-Return the FULL sheet each time (it replaces the current columns). Output ONLY the JSON object, no prose outside it.`;
+Output ONLY the JSON object, no prose outside it.`;
 }
 
 // Keep the last N turns verbatim; older turns get condensed into a summary.
