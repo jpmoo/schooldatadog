@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth/guards";
 import { getChart } from "@/lib/charts/queries";
 import { getUserGroups } from "@/lib/groups/queries";
+import { getUserViews } from "@/lib/views/queries";
 import { searchMetrics } from "@/lib/workshop/actions";
 import { getDemographicMetricCodes, getEntities, getYears } from "@/lib/workshop/queries";
 import { Visualizer } from "./visualizer";
@@ -15,10 +16,11 @@ export default async function VisualizerPage({
   const chartId = chart ? Number(chart) : NaN;
 
   const years = await getYears();
-  const [entities, initialMetrics, groups, demographicMetrics, saved] = await Promise.all([
+  const [entities, initialMetrics, groups, views, demographicMetrics, saved] = await Promise.all([
     getEntities(),
     searchMetrics("", years[0]),
     getUserGroups(),
+    getUserViews(),
     getDemographicMetricCodes(),
     Number.isInteger(chartId) ? getChart(chartId) : Promise.resolve(null),
   ]);
@@ -29,6 +31,7 @@ export default async function VisualizerPage({
       entities={entities}
       initialMetrics={initialMetrics}
       groups={groups}
+      views={views}
       demographicMetrics={demographicMetrics}
       initialChart={saved}
     />

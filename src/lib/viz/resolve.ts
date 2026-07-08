@@ -5,7 +5,8 @@
 
 import { getColumnValues } from "@/lib/workshop/actions";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
-import type { DataSpec, FieldSpec } from "./spec";
+import { computeCalc, type Column } from "@/app/(app)/workshop/columns";
+import type { CalcFieldSpec, DataSpec, FieldSpec } from "./spec";
 
 export type Row = Record<string, string | number | null>;
 
@@ -39,8 +40,32 @@ export async function resolveDataset(
     ),
   );
 
-  const rows: Row[] = [];
+  const calc = data.calc ?? [];
   const yearAxis = years.length ? years : [""];
+
+  // Compute calculated fields per year, reusing the workshop calc engine over
+  // the resolved data-field values as pseudo data columns.
+  const calcByYear = new Map<string, Record<string, Record<number, number | null>>>();
+  for (const yr of yearAxis) {
+    const columnsById: Record<string, Column> = {};
+    for (const f of data.fields) {
+      const m = values.get(key(f.id, yr));
+      const vals: Record<number, number | null> = {};
+      for (const eid of data.entities.ids) vals[eid] = f.years.includes(yr) ? (m?.get(eid) ?? null) : null;
+      columnsById[f.id] = { id: f.id, kind: "data", values: vals } as unknown as Column;
+    }
+    const byField: Record<string, Record<number, number | null>> = {};
+    for (const c of calc) {
+      byField[c.id] = computeCalc(
+        { ...c, kind: "calc" } as unknown as Parameters<typeof computeCalc>[0],
+        data.entities.ids,
+        columnsById,
+      );
+    }
+    calcByYear.set(yr, byField);
+  }
+
+  const rows: Row[] = [];
   for (const eid of data.entities.ids) {
     const ent = entitiesById.get(eid);
     if (!ent) continue;
@@ -56,30 +81,27 @@ export async function resolveDataset(
         // A field contributes its value only for years it actually spans.
         row[f.id] = f.years.includes(yr) ? (values.get(key(f.id, yr))?.get(eid) ?? null) : null;
       }
+      for (const c of calc) row[c.id] = calcByYear.get(yr)?.[c.id]?.[eid] ?? null;
       rows.push(row);
     }
   }
 
-  return { rows, columns: columnsOf(data.fields) };
+  return { rows, columns: columnsOf(data.fields, calc) };
 }
 
 function key(fieldId: string, year: string) {
   return `${fieldId}::${year}`;
 }
 
-export function columnsOf(fields: FieldSpec[]): ResolvedColumn[] {
+export function columnsOf(fields: FieldSpec[], calc: CalcFieldSpec[] = []): ResolvedColumn[] {
   return [
     { id: "entityName", label: "Entity name", kind: "builtin" },
     { id: "county", label: "County", kind: "builtin" },
     { id: "entityType", label: "Type", kind: "builtin" },
     { id: "year", label: "Year", kind: "builtin" },
     ...fields.map(
-      (f): ResolvedColumn => ({
-        id: f.id,
-        label: f.label,
-        kind: "field",
-        dataType: f.dataType,
-      }),
+      (f): ResolvedColumn => ({ id: f.id, label: f.label, kind: "field", dataType: f.dataType }),
     ),
+    ...calc.map((c): ResolvedColumn => ({ id: c.id, label: `ƒ ${c.name}`, kind: "field" })),
   ];
 }

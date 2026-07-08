@@ -34,9 +34,25 @@ export const entitySourceSchema = z.object({
 });
 export type EntitySource = z.infer<typeof entitySourceSchema>;
 
+export const CALC_TYPES = ["avg", "change", "avgchange", "rank", "similarity"] as const;
+export type CalcType = (typeof CALC_TYPES)[number];
+
+/** A calculated field derived from other fields (mirrors the workshop calc engine). */
+export const calcFieldSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  calcType: z.enum(CALC_TYPES),
+  sourceIds: z.array(z.string()),
+  weights: z.record(z.string(), z.number()).default({}),
+  asPercent: z.boolean().default(false),
+  refEntityId: z.number().nullish(),
+});
+export type CalcFieldSpec = z.infer<typeof calcFieldSchema>;
+
 export const dataSpecSchema = z.object({
   entities: entitySourceSchema,
   fields: z.array(fieldSchema),
+  calc: z.array(calcFieldSchema).default([]),
 });
 export type DataSpec = z.infer<typeof dataSpecSchema>;
 
@@ -79,7 +95,7 @@ export function blankSpec(): ChartSpec {
   return {
     version: 1,
     engine: "vega-lite",
-    data: { entities: { ids: [], level: "district" }, fields: [] },
+    data: { entities: { ids: [], level: "district" }, fields: [], calc: [] },
     mark: "bar",
     encoding: {},
     theme: "app",
