@@ -13,7 +13,7 @@ export default async function GroupsPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
-          <Icon name="saveViewOrGroup" className="h-7 w-7 text-indigo-500" />
+          <Icon name="savedItems" className="h-7 w-7 text-indigo-500" />
           Saved Groups
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">

@@ -7,13 +7,23 @@ import { getCurrentSession } from "@/lib/auth/session";
 
 type Tile = { title: string; body: string; href: string; icon?: IconName; adminOnly?: boolean };
 
-const tiles: Tile[] = [
+// Left column: the tools. Right column: saved items (+ settings for admins).
+const toolTiles: Tile[] = [
   {
     title: "Data Workshop",
     body: "Build comparative spreadsheets — drag in metrics, add calculated fields, and filter.",
     href: "/workshop",
     icon: "dataWorkshop",
   },
+  {
+    title: "Visualizer",
+    body: "Build attractive, exportable charts — bar, line, scatter, heatmap — from any data.",
+    href: "/visualizer",
+    icon: "visualizer",
+  },
+];
+
+const savedTiles: Tile[] = [
   {
     title: "Saved Views",
     body: "Reopen, rename, or delete full workshop sessions — filters, sorts, and calculated fields.",
@@ -24,16 +34,10 @@ const tiles: Tile[] = [
     title: "Saved Groups",
     body: "Preview, rename, and delete the school & district groups you use as workshop filters.",
     href: "/groups",
-    icon: "saveViewOrGroup",
+    icon: "savedItems",
   },
   {
-    title: "Visualizer",
-    body: "Build attractive, exportable charts — bar, line, scatter, heatmap — from any data.",
-    href: "/visualizer",
-    icon: "visualizer",
-  },
-  {
-    title: "Saved Charts",
+    title: "Saved Visualizations",
     body: "Open, rename, duplicate, or delete the charts you've built in the Visualizer.",
     href: "/charts",
     icon: "savedItems",
@@ -46,6 +50,21 @@ const tiles: Tile[] = [
     adminOnly: true,
   },
 ];
+
+function TileCard({ tile }: { tile: Tile }) {
+  return (
+    <Link
+      href={tile.href}
+      className="flex flex-1 flex-col gap-2 rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
+    >
+      <h2 className="flex items-center gap-2.5 font-semibold text-slate-900 dark:text-white">
+        {tile.icon && <Icon name={tile.icon} className="h-7 w-7 text-indigo-500" />}
+        {tile.title}
+      </h2>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{tile.body}</p>
+    </Link>
+  );
+}
 
 async function countRows(table: typeof metrics | typeof entities | typeof facts) {
   const [{ count }] = await db
@@ -97,22 +116,19 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {tiles
-          .filter((t) => !t.adminOnly || isAdmin)
-          .map((t) => (
-          <Link
-            key={t.title}
-            href={t.href}
-            className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
-          >
-            <h2 className="flex items-center gap-2.5 font-semibold text-slate-900 dark:text-white">
-              {t.icon && <Icon name={t.icon} className="h-7 w-7 text-indigo-500" />}
-              {t.title}
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t.body}</p>
-          </Link>
-        ))}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          {toolTiles.map((t) => (
+            <TileCard key={t.title} tile={t} />
+          ))}
+        </div>
+        <div className="flex flex-col gap-4">
+          {savedTiles
+            .filter((t) => !t.adminOnly || isAdmin)
+            .map((t) => (
+              <TileCard key={t.title} tile={t} />
+            ))}
+        </div>
       </div>
 
       {factCount === 0 && (

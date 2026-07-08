@@ -13,8 +13,8 @@ export default async function ChartsPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
-          <Icon name="visualizer" className="h-7 w-7 text-indigo-500" />
-          Saved Charts
+          <Icon name="savedItems" className="h-7 w-7 text-indigo-500" />
+          Saved Visualizations
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
           Charts built in the{" "}
