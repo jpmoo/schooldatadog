@@ -581,6 +581,16 @@ export function Visualizer({
     const c = spec.encoding?.[ch] as Record<string, unknown> | undefined;
     return !!c && c.type === "quantitative" && !("bin" in c);
   };
+  // The default (data-derived) bounds an axis uses when Min/Max aren't set, so
+  // they can be shown in the boxes. Matches VegaChart's extent logic.
+  const axisExtent = (ch: string): { lo: number | ""; hi: number | "" } => {
+    const c = spec.encoding?.[ch] as Record<string, unknown> | undefined;
+    const field = c?.field;
+    if (typeof field !== "string" || "aggregate" in (c ?? {})) return { lo: "", hi: "" };
+    const nums = rows.map((r) => r[field]).filter((v): v is number => typeof v === "number");
+    if (!nums.length) return { lo: "", hi: "" };
+    return { lo: Math.min(...nums, 0), hi: Math.max(...nums) };
+  };
 
   // Histogram bucketing on the x axis: a fixed range size (bin.step) OR a target
   // number of buckets (bin.maxbins) — never both. Empty/invalid → auto (bin:true).
@@ -1040,10 +1050,9 @@ export function Visualizer({
                 <SortSelect ch={ch} />
                 {def?.field ? (
                   <input
-                    value={def.title ?? ""}
+                    value={(def.title as string | undefined) ?? axisLabels[def.field] ?? def.field}
                     onChange={(e) => setChannelTitle(ch, e.target.value)}
-                    placeholder={`Label: ${axisLabels[def.field] ?? def.field}`}
-                    className={`${input} text-xs`}
+                    className={`${input} w-full text-xs`}
                     title="Axis / legend label"
                   />
                 ) : (
@@ -1118,35 +1127,42 @@ export function Visualizer({
               </span>
             </label>
           )}
-          {(["x", "y"] as const).map((ax) =>
-            isNumericAxis(ax) ? (
+          {(["x", "y"] as const).map((ax) => {
+            if (!isNumericAxis(ax)) return null;
+            const ext = axisExtent(ax);
+            // Show the effective default (data bounds) when Min/Max aren't set.
+            const defaults: Record<"axisMin" | "axisMax" | "interval", number | ""> = {
+              axisMin: ext.lo,
+              axisMax: ext.hi,
+              interval: "",
+            };
+            return (
               <div key={ax} className="flex flex-col gap-1">
                 <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">{ax} axis</span>
                 <div className="grid grid-cols-3 gap-2">
-                  {([
-                    ["axisMin", "Min", "auto"],
-                    ["axisMax", "Max", "auto"],
-                    ["interval", "Interval", "auto"],
-                  ] as const).map(([key, label, ph]) => (
-                    <label key={key} className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-                      {label}
-                      <input
-                        type="number"
-                        step="any"
-                        value={axisNumOf(ax, key)}
-                        onChange={(e) => setAxisNum(ax, key, e.target.value)}
-                        placeholder={ph}
-                        className={`${input} w-full`}
-                      />
-                    </label>
-                  ))}
+                  {(["axisMin", "axisMax", "interval"] as const).map((key) => {
+                    const set = axisNumOf(ax, key);
+                    return (
+                      <label key={key} className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                        {key === "axisMin" ? "Min" : key === "axisMax" ? "Max" : "Interval"}
+                        <input
+                          type="number"
+                          step="any"
+                          value={set !== "" ? set : defaults[key]}
+                          onChange={(e) => setAxisNum(ax, key, e.target.value)}
+                          placeholder="auto"
+                          className={`${input} w-full`}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
                 <span className="text-[11px] text-slate-400">
                   Set Min, Max and the spacing between ticks (e.g. 0 / 20 / 5 → 0, 5, 10, 15, 20).
                 </span>
               </div>
-            ) : null,
-          )}
+            );
+          })}
           {chartType === "histogram" && (
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Buckets (x)</span>
