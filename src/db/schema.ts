@@ -249,6 +249,30 @@ export const savedViews = pgTable(
   (t) => [index("saved_views_user_idx").on(t.userId)],
 );
 
+/**
+ * A saved Visualizer chart: a named, declarative chart spec (data query +
+ * encoding). Stored per-user as opaque JSON — the Visualizer knows the spec
+ * schema; the DB just holds it.
+ */
+export const savedCharts = pgTable(
+  "saved_charts",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    spec: jsonb("spec").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("saved_charts_user_idx").on(t.userId)],
+);
+
 /* ------------------------------------------------------------------ *
  * App settings (key/value)
  * ------------------------------------------------------------------ */
@@ -324,6 +348,8 @@ export type EntityGroup = typeof entityGroups.$inferSelect;
 export type NewEntityGroup = typeof entityGroups.$inferInsert;
 export type SavedView = typeof savedViews.$inferSelect;
 export type NewSavedView = typeof savedViews.$inferInsert;
+export type SavedChart = typeof savedCharts.$inferSelect;
+export type NewSavedChart = typeof savedCharts.$inferInsert;
 
 export type UserRole = (typeof userRole.enumValues)[number];
 export type EntityType = (typeof entityType.enumValues)[number];

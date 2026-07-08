@@ -27,6 +27,18 @@ const tiles: Tile[] = [
     icon: "saveViewOrGroup",
   },
   {
+    title: "Visualizer",
+    body: "Build attractive, exportable charts — bar, line, scatter, heatmap — from any data.",
+    href: "/visualizer",
+    icon: "visualizer",
+  },
+  {
+    title: "Saved Charts",
+    body: "Open, rename, duplicate, or delete the charts you've built in the Visualizer.",
+    href: "/charts",
+    icon: "savedItems",
+  },
+  {
     title: "System Settings",
     body: "Admin tools for AI/Ollama, the data dictionary, entities, and user accounts.",
     href: "/admin",
