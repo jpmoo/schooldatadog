@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import type { View } from "vega";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
+import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import type { SavedViewMeta } from "@/lib/views/queries";
 import { searchMetrics } from "@/lib/workshop/actions";
@@ -53,7 +54,7 @@ export function Visualizer({
   years,
   entities,
   initialMetrics,
-  groups,
+  groups: initialGroups,
   views,
   demographicMetrics,
   initialChart,
@@ -94,6 +95,10 @@ export function Visualizer({
   const [jsonErr, setJsonErr] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [advOpen, setAdvOpen] = useState(false);
+  const [groups, setGroups] = useState<GroupLite[]>(initialGroups);
+  // Save-as-group dialog state.
+  const [groupSave, setGroupSave] = useState<{ name: string; err: string | null } | null>(null);
+  const [groupConflict, setGroupConflict] = useState<{ name: string; id: number } | null>(null);
   const viewRef = useRef<View | null>(null);
   const onChartView = useCallback((v: View | null) => {
     viewRef.current = v;
@@ -155,6 +160,30 @@ export function Visualizer({
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setEntities([...next], spec.data.entities.source, spec.data.entities.level);
+  }
+  function addGroupToList(g: GroupLite) {
+    setGroups((gs) => [...gs.filter((x) => x.id !== g.id), g].sort((a, b) => a.name.localeCompare(b.name)));
+  }
+  async function saveGroup(name: string): Promise<void> {
+    const ids = spec.data.entities.ids;
+    const res = await createGroup(name, ids);
+    if (res.ok) {
+      addGroupToList(res.group);
+      setGroupSave(null);
+    } else if ("conflict" in res) {
+      setGroupConflict({ name, id: res.conflict.id });
+      setGroupSave(null);
+    } else {
+      setGroupSave((g) => (g ? { ...g, err: res.error } : g));
+    }
+  }
+  async function resolveGroupConflict(mode: "overwrite" | "new") {
+    if (!groupConflict) return;
+    const { name, id } = groupConflict;
+    const ids = spec.data.entities.ids;
+    const res = mode === "overwrite" ? await overwriteGroup(id, ids) : await createGroup(name, ids, true);
+    if (res.ok) addGroupToList(res.group);
+    setGroupConflict(null);
   }
   const universe = useMemo(() => {
     const base =
@@ -555,6 +584,11 @@ export function Visualizer({
   // When a bar chart has a field spanning multiple years, those years need to be
   // laid out — side by side (grouped) or stacked. Offer that as one clear choice.
   const multiYear = spec.data.fields.some((f) => f.years.length > 1);
+  // Stacking only makes sense for additive quantities (counts, dollars) — never
+  // rates, percents, means or scores, where summing years is meaningless.
+  const stackable = spec.data.fields
+    .filter((f) => f.years.length > 1)
+    .every((f) => f.dataType === "count" || f.dataType === "currency");
   const barLayout = (() => {
     const xo = (spec.encoding?.xOffset as Record<string, unknown> | undefined)?.field;
     const col = (spec.encoding?.color as Record<string, unknown> | undefined)?.field;
@@ -712,6 +746,14 @@ export function Visualizer({
             <Icon name="myDistrictSchools" className="h-4 w-4" />
             {entOpen ? "Hide entity list" : "Choose entities…"}
           </button>
+          <button
+            onClick={() => setGroupSave({ name: provenance?.name ?? "", err: null })}
+            disabled={spec.data.entities.ids.length === 0}
+            className={`${input} flex items-center justify-center gap-2 disabled:opacity-40`}
+          >
+            <Icon name="saveViewOrGroup" className="h-4 w-4" />
+            Save as group ({spec.data.entities.ids.length})
+          </button>
           {entOpen && (
             <div className="rounded-lg border border-slate-200 p-2 dark:border-slate-800">
               <input type="search" value={entSearch} onChange={(e) => setEntSearch(e.target.value)} placeholder="Search…" className={`${input} w-full`} />
@@ -865,11 +907,14 @@ export function Visualizer({
               <span className="font-medium text-slate-600 dark:text-slate-300">Multiple years</span>
               <select value={barLayout} onChange={(e) => setBarLayout(e.target.value)} className={input}>
                 <option value="grouped">Side by side (grouped)</option>
-                <option value="stacked">Stacked</option>
+                <option value="stacked" disabled={!stackable}>
+                  Stacked{stackable ? "" : " — n/a (not an additive measure)"}
+                </option>
                 <option value="overlapping">Overlapping (not recommended)</option>
               </select>
               <span className="text-[11px] text-slate-400">
                 How to lay out the years for each district.
+                {!stackable && " Stacking is off for rates/scores — summing years isn’t meaningful."}
               </span>
             </label>
           )}
@@ -1049,6 +1094,53 @@ export function Visualizer({
           </div>
         )}
       </div>
+
+      {groupSave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setGroupSave(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Save as group</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Save these {spec.data.entities.ids.length} entities as a reusable group.
+            </p>
+            <input
+              autoFocus
+              value={groupSave.name}
+              onChange={(e) => setGroupSave({ name: e.target.value, err: null })}
+              onKeyDown={(e) => { if (e.key === "Enter" && groupSave.name.trim()) void saveGroup(groupSave.name.trim()); }}
+              placeholder="Group name"
+              className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            />
+            {groupSave.err && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{groupSave.err}</p>}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button onClick={() => setGroupSave(null)} className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">Cancel</button>
+              <button
+                disabled={!groupSave.name.trim()}
+                onClick={() => void saveGroup(groupSave.name.trim())}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+              >
+                <Icon name="saveViewOrGroup" className="h-4 w-4" />
+                Save group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {groupConflict && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setGroupConflict(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Name already used</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              A group named “{groupConflict.name}” already exists. Overwrite it, or save as new?
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button onClick={() => setGroupConflict(null)} className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">Cancel</button>
+              <button onClick={() => void resolveGroupConflict("new")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Save as new</button>
+              <button onClick={() => void resolveGroupConflict("overwrite")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500">Overwrite</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

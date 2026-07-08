@@ -17,6 +17,7 @@ import { IconMenu } from "@/components/icon-menu";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import { createView, overwriteView } from "@/lib/views/actions";
+import { worksheetChat, type ChatMessage } from "@/lib/worksheet/chat";
 import { getColumnValues, getMetricSubgroups, searchMetrics } from "@/lib/workshop/actions";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
 import type { MetricLite } from "@/lib/workshop/types";
@@ -36,6 +37,16 @@ import {
 
 const natCompare = (a: string, b: string) =>
   a.localeCompare(b, undefined, { numeric: true });
+
+// Standard demographic subgroups offered to the AI (not every metric has each).
+const AI_SUBGROUPS = [
+  "All Students", "Female", "Male",
+  "American Indian or Alaska Native", "Asian or Native Hawaiian/Other Pacific Islander",
+  "Black or African American", "Hispanic or Latino", "Multiracial", "White",
+  "Economically Disadvantaged", "Not Economically Disadvantaged",
+  "Students with Disabilities", "Students without Disabilities",
+  "English Language Learners",
+];
 
 // ── data export (CSV / Excel / print-to-PDF) ──────────────────────────────
 function colLabel(col: Column): string {
@@ -274,6 +285,96 @@ export function Workshop({
   const [paneHidden, setPaneHidden] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const homeCycleRef = useRef(0); // schools-only: which home-district school to jump to next
+
+  // ── AI assistant ──
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInput, setAiInput] = useState("");
+  const [aiMsgs, setAiMsgs] = useState<(ChatMessage & { error?: boolean })[]>([]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const aiScroll = useRef<HTMLDivElement>(null);
+  const metricByCode = useMemo(() => new Map(initialMetrics.map((m) => [m.code, m])), [initialMetrics]);
+  useEffect(() => {
+    aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
+  }, [aiMsgs, aiBusy]);
+
+  // Apply an AI "sheet" command: set the data columns + view/filters/sort.
+  async function applyAiSheet(sheet: unknown) {
+    if (!sheet || typeof sheet !== "object") return;
+    const s = sheet as Record<string, unknown>;
+    if (s.viewMode === "districts" || s.viewMode === "schools" || s.viewMode === "both") setViewMode(s.viewMode);
+    if (typeof s.county === "string" && s.county !== "keep") setCounty(s.county === "all" ? "" : s.county);
+    if (typeof s.group === "string" && s.group !== "keep") {
+      if (s.group === "none") applyGroup("");
+      else {
+        const g = groups.find((x) => x.name.toLowerCase() === (s.group as string).toLowerCase());
+        if (g) applyGroup(String(g.id));
+      }
+    }
+    if (Array.isArray(s.columns)) {
+      const stamp = Math.round(performance.now());
+      const cols: DataColumn[] = [];
+      (s.columns as Record<string, unknown>[]).forEach((c, i) => {
+        const m = metricByCode.get(String(c.metric));
+        if (!m) return;
+        const yr = typeof c.year === "string" && years.includes(c.year) ? c.year : year;
+        const sg = typeof c.subgroup === "string" ? c.subgroup : ALL_STUDENTS;
+        cols.push({ id: `data-${m.code}-${yr}-ai${stamp}-${i}`, kind: "data", metric: m, year: yr, subgroup: sg, values: {} });
+      });
+      setColumns(cols); // replaces every column (calc fields aren't AI-managed)
+      for (const col of cols) {
+        const vals = await getColumnValues(col.metric.code, col.year, col.subgroup);
+        const map: Record<number, number | null> = {};
+        for (const v of vals) map[v.entityId] = v.value;
+        setColumns((cs) => cs.map((x) => (x.id === col.id ? { ...(x as DataColumn), values: map } : x)));
+      }
+      const so = s.sort as Record<string, unknown> | null | undefined;
+      if (so && typeof so === "object") {
+        const code = String(so.metric ?? "");
+        const yr = typeof so.year === "string" ? so.year : "";
+        const target = cols.find((c) => c.metric.code === code && (!yr || c.year === yr));
+        if (target) {
+          const dir = so.direction === "asc" ? "asc" : "desc";
+          applySort("district", target.id, dir, false);
+          applySort("school", target.id, dir, false);
+        }
+      }
+    }
+  }
+
+  async function sendAi() {
+    const text = aiInput.trim();
+    if (!text || aiBusy) return;
+    const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
+    setAiMsgs((m) => [...m, { role: "user", content: text }]);
+    setAiInput("");
+    setAiBusy(true);
+    const state = {
+      viewMode,
+      county: county || "all",
+      group: groups.find((g) => String(g.id) === groupFilter)?.name ?? null,
+      columns: columns
+        .filter((c): c is DataColumn => c.kind === "data")
+        .map((c) => ({ metric: c.metric.code, metricName: c.metric.name, year: c.year, subgroup: c.subgroup })),
+    };
+    const res = await worksheetChat(history, state, {
+      metrics: initialMetrics.map((m) => ({ code: m.code, name: m.name, category: m.category ?? null })),
+      years,
+      subgroups: AI_SUBGROUPS,
+      groups: groups.map((g) => g.name),
+      counties,
+      homeDistrict: homeDistrictId != null ? (entities.find((e) => e.id === homeDistrictId)?.name ?? null) : null,
+    });
+    setAiBusy(false);
+    if (res.ok) {
+      const reply = (res.reply ?? "").trim();
+      const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
+      const content = res.sheet ? (!reply || looksJson ? "Updating the table…" : reply) : reply || "(done)";
+      setAiMsgs((m) => [...m, { role: "assistant", content }]);
+      if (res.sheet) void applyAiSheet(res.sheet);
+    } else {
+      setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
+    }
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -889,7 +990,8 @@ export function Workshop({
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragging(null)}
     >
-      <div className="flex h-[calc(100vh-6.5rem)] gap-3" onClick={() => ctx && setCtx(null)}>
+      <div className="flex h-[calc(100vh-6.5rem)] flex-col gap-2">
+      <div className="flex min-h-0 flex-1 gap-3" onClick={() => ctx && setCtx(null)}>
         {/* LEFT — metrics panel, collapsible to a slim strip on the left edge */}
         {paneHidden ? (
           <button
@@ -1284,6 +1386,63 @@ export function Workshop({
             }}
           />
         )}
+      </div>
+
+      {/* BOTTOM — AI assistant */}
+      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <button
+          onClick={() => setAiOpen((v) => !v)}
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm font-medium text-slate-700 dark:text-slate-200"
+        >
+          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">AI</span>
+          <span className="flex-1">Ask the AI to build or explain this table</span>
+          <span className="text-slate-400">{aiOpen ? "▼" : "▲"}</span>
+        </button>
+        {aiOpen && (
+          <div className="flex h-56 flex-col border-t border-slate-200 dark:border-slate-800">
+            <div ref={aiScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {aiMsgs.length === 0 && (
+                <p className="text-sm text-slate-400">
+                  Try “add grad rate and enrollment for 2023-24”, “show the last three years of Grade 3
+                  ELA scores”, or “which of my columns has the widest spread?”
+                </p>
+              )}
+              {aiMsgs.map((m, i) => (
+                <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                  <div
+                    className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-sm ${
+                      m.role === "user"
+                        ? "bg-indigo-600 text-white"
+                        : m.error
+                          ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
+            </div>
+            <div className="flex gap-2 border-t border-slate-200 p-2 dark:border-slate-800">
+              <input
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendAi(); } }}
+                placeholder="Tell the AI what to put in the table, or ask about the data…"
+                className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+              <button
+                onClick={() => void sendAi()}
+                disabled={aiBusy || !aiInput.trim()}
+                className="rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       </div>
 
       <DragOverlay dropAnimation={null}>
