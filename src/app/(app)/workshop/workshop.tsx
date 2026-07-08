@@ -322,17 +322,9 @@ export function Workshop({
   }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns]);
 
   // ── column ops ──
+  // Duplicates are allowed — the same metric can legitimately appear more than
+  // once (e.g. different demographic slices, or the same slice for comparison).
   async function addDataColumn(metric: MetricLite, yr: string, subgroup = ALL_STUDENTS) {
-    if (
-      columns.some(
-        (c) =>
-          c.kind === "data" &&
-          c.metric.code === metric.code &&
-          c.year === yr &&
-          c.subgroup === subgroup,
-      )
-    )
-      return;
     const id = `data-${metric.code}-${yr}-${columns.length}-${Math.round(performance.now())}`;
     setColumns((cs) => [...cs, { id, kind: "data", metric, year: yr, subgroup, values: {} }]);
     setLoading((s) => new Set(s).add(id));
