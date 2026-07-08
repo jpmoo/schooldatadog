@@ -60,7 +60,7 @@ export type DataSpec = z.infer<typeof dataSpecSchema>;
  *  column (entityName, county, entityType, year). */
 export const channelSchema = z
   .object({
-    field: z.string(),
+    field: z.string().optional(), // optional: e.g. a count-aggregate axis has no field
     type: z.enum(["quantitative", "nominal", "ordinal", "temporal"]).optional(),
     title: z.string().optional(),
     aggregate: z.string().optional(),

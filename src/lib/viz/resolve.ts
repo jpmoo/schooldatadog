@@ -23,6 +23,7 @@ export type ResolvedData = { rows: Row[]; columns: ResolvedColumn[] };
 export async function resolveDataset(
   data: DataSpec,
   entitiesById: Map<number, WorkshopEntity>,
+  homeDistrictId: number | null = null,
 ): Promise<ResolvedData> {
   const ids = new Set(data.entities.ids);
   const years = [...new Set(data.fields.flatMap((f) => f.years))].sort();
@@ -70,12 +71,15 @@ export async function resolveDataset(
     const ent = entitiesById.get(eid);
     if (!ent) continue;
     for (const yr of yearAxis) {
+      const isHome =
+        homeDistrictId != null && (eid === homeDistrictId || ent.parentDistrictId === homeDistrictId);
       const row: Row = {
         entityId: eid,
         entityName: ent.name,
         county: ent.county ?? "",
         entityType: ent.type,
         year: yr,
+        homeDistrict: isHome ? "My district" : "Other",
       };
       for (const f of data.fields) {
         // A field contributes its value only for years it actually spans.
@@ -86,19 +90,26 @@ export async function resolveDataset(
     }
   }
 
-  return { rows, columns: columnsOf(data.fields, calc) };
+  return { rows, columns: columnsOf(data.fields, calc, homeDistrictId != null) };
 }
 
 function key(fieldId: string, year: string) {
   return `${fieldId}::${year}`;
 }
 
-export function columnsOf(fields: FieldSpec[], calc: CalcFieldSpec[] = []): ResolvedColumn[] {
+export function columnsOf(
+  fields: FieldSpec[],
+  calc: CalcFieldSpec[] = [],
+  hasHomeDistrict = false,
+): ResolvedColumn[] {
   return [
     { id: "entityName", label: "Entity name", kind: "builtin" },
     { id: "county", label: "County", kind: "builtin" },
     { id: "entityType", label: "Type", kind: "builtin" },
     { id: "year", label: "Year", kind: "builtin" },
+    ...(hasHomeDistrict
+      ? [{ id: "homeDistrict", label: "My district (highlight)", kind: "builtin" as const }]
+      : []),
     ...fields.map(
       (f): ResolvedColumn => ({ id: f.id, label: f.label, kind: "field", dataType: f.dataType }),
     ),

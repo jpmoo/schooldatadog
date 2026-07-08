@@ -72,8 +72,9 @@ ${catalog.homeDistrict ? `${catalog.homeDistrict} — when the user says "my dis
 # Entities currently on the chart
 ${
   catalog.selectedEntities && catalog.selectedEntities.length
-    ? `${catalog.selectedEntities.slice(0, 80).join(", ")}${catalog.selectedEntities.length > 80 ? `, …(+${catalog.selectedEntities.length - 80} more)` : ""}. These are already selected — set "entities":"keep" to leave this set alone unless the user asks to change it.`
-    : "(none selected yet)"
+    ? `${catalog.selectedEntities.length} already selected: ${catalog.selectedEntities.slice(0, 80).join(", ")}${catalog.selectedEntities.length > 80 ? `, …(+${catalog.selectedEntities.length - 80} more)` : ""}.
+IMPORTANT: The user deliberately chose these (often by importing a view). ALWAYS use "entities":"keep" so the chart is built from EXACTLY this set. Do NOT switch to "districts"/"schools"/"both" (all entities) unless the user explicitly says "all districts", "every school", "statewide", etc. A histogram/count over "these districts" means a count over THIS selected set, not the whole state.`
+    : "(none selected yet — pick an appropriate set for what the user asks)"
 }
 
 # The current chart (JSON)
@@ -95,10 +96,12 @@ A "chart" object looks like:
 Rules:
 - "metric" MUST be one of the codes above. "years" and "subgroup" MUST be from the lists above.
 - Field "id" is your short handle; reference it in encoding channels.
-- Encoding channel "field" is either a field id, or a built-in column: "entityName", "year", "county".
+- Encoding channel "field" is either a field id, or a built-in column: "entityName", "year", "county", "homeDistrict".
 - For a line over time: put MULTIPLE years on ONE field, then x = {"field":"year","type":"ordinal"}, y = that field, color = {"field":"entityName","type":"nominal"}.
 - For comparing entities on one metric: mark "bar", x = entityName, y = the field.
-- "entities":"keep" leaves the current entity set unchanged.
+- To HIGHLIGHT the user's own district, set color = {"field":"homeDistrict","type":"nominal"}. This built-in is "My district" for the user's district (and its schools) and "Other" for everyone else. It works on a normal bar chart (their bar gets its own color) AND on a histogram (bin scores on x with {"bin":true}, y = {"aggregate":"count"}, color = homeDistrict — the bin containing their district shows a distinct segment). So you CAN shade the user's district — use this instead of saying it's not possible.
+- For a histogram: x = a field with {"bin": true}, y = {"aggregate": "count"}, mark "bar".
+- "entities":"keep" leaves the current entity set unchanged (this is the default when entities are already selected).
 Keep charts readable. Output ONLY the JSON object, no prose outside it.`;
 }
 

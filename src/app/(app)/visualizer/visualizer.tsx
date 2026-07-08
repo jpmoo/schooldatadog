@@ -271,15 +271,21 @@ export function Visualizer({
   );
 
   // Apply a chart command from the AI onto the current spec.
-  function applyAiChart(chart: unknown) {
+  function applyAiChart(chart: unknown, userText = "") {
     if (!chart || typeof chart !== "object") return;
     const c = chart as Record<string, unknown>;
 
-    // entities
+    // entities — protect a curated selection (e.g. an imported view). A bare
+    // "all districts/schools" only takes effect if it's empty or the user
+    // clearly asked to broaden the set; group/view references always apply.
     const ent = c.entities;
     if (ent && ent !== "keep") {
-      if (ent === "districts" || ent === "schools" || ent === "both") applyBase(ent);
-      else if (typeof ent === "object" && "group" in ent) {
+      const wantsAll =
+        /\ball\b|\bevery\b|\bstatewide\b|\bacross all\b|\bwhole state\b|\bentire state\b/i.test(userText);
+      const hasSelection = spec.data.entities.ids.length > 0;
+      if (ent === "districts" || ent === "schools" || ent === "both") {
+        if (!hasSelection || wantsAll) applyBase(ent);
+      } else if (typeof ent === "object" && "group" in ent) {
         const name = String((ent as { group: unknown }).group).toLowerCase();
         const g = groups.find((x) => x.name.toLowerCase() === name);
         if (g) applyGroup(String(g.id));
@@ -353,7 +359,7 @@ export function Visualizer({
           : reply
         : reply || "(done)";
       setAiMsgs((m) => [...m, { role: "assistant", content }]);
-      if (res.chart) applyAiChart(res.chart);
+      if (res.chart) applyAiChart(res.chart, text);
     } else {
       setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
     }
@@ -374,7 +380,7 @@ export function Visualizer({
       return;
     }
     setResolving(true);
-    resolveDataset(spec.data, entitiesById)
+    resolveDataset(spec.data, entitiesById, homeDistrictId)
       .then((res) => {
         if (live) {
           setRows(res.rows);
@@ -394,7 +400,10 @@ export function Visualizer({
     if (!showJson) setJsonText(JSON.stringify(spec, null, 2));
   }, [spec, showJson]);
 
-  const columns = useMemo(() => columnsOf(spec.data.fields, spec.data.calc), [spec.data.fields, spec.data.calc]);
+  const columns = useMemo(
+    () => columnsOf(spec.data.fields, spec.data.calc, homeDistrictId != null),
+    [spec.data.fields, spec.data.calc, homeDistrictId],
+  );
   const axisLabels = useMemo(() => Object.fromEntries(columns.map((c) => [c.id, c.label])), [columns]);
 
   function addField(m: MetricLite) {
