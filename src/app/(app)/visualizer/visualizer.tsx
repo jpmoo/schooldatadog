@@ -510,6 +510,52 @@ export function Visualizer({
       return { ...s, encoding: enc };
     });
 
+  // Sort order for a categorical channel (axis / grouping / colour).
+  const channelSortValue = (ch: string) => {
+    const srt = (spec.encoding?.[ch] as Record<string, unknown> | undefined)?.sort;
+    return typeof srt === "string" ? srt : "";
+  };
+  const setChannelSort = (ch: string, value: string) =>
+    setSpec((s) => {
+      const cur = s.encoding?.[ch] as Record<string, unknown> | undefined;
+      if (!cur) return s;
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      const next = { ...cur };
+      if (value) next.sort = value;
+      else delete next.sort;
+      enc[ch] = next;
+      return { ...s, encoding: enc as ChartSpec["encoding"] };
+    });
+  // A channel holds a sortable category when it has a field that isn't a
+  // continuous measure (quantitative / binned / aggregated).
+  const isCategoricalChannel = (ch: string) => {
+    const c = spec.encoding?.[ch] as Record<string, unknown> | undefined;
+    return !!c?.field && c.type !== "quantitative" && !("bin" in c) && !("aggregate" in c);
+  };
+  const sortOptionsFor = (ch: string) => {
+    const opts = [
+      { v: "", label: "Sort: default" },
+      { v: "ascending", label: "Sort: A → Z / low → high" },
+      { v: "descending", label: "Sort: Z → A / high → low" },
+    ];
+    if (ch === "x") opts.push({ v: "-y", label: "Sort: by value, high → low" }, { v: "y", label: "Sort: by value, low → high" });
+    else if (ch === "y") opts.push({ v: "-x", label: "Sort: by value, high → low" }, { v: "x", label: "Sort: by value, low → high" });
+    return opts;
+  };
+  const SortSelect = ({ ch }: { ch: string }) =>
+    isCategoricalChannel(ch) ? (
+      <select
+        value={channelSortValue(ch)}
+        onChange={(e) => setChannelSort(ch, e.target.value)}
+        className={`${input} w-full text-xs`}
+        title="Order of the values on this channel"
+      >
+        {sortOptionsFor(ch).map((o) => (
+          <option key={o.v} value={o.v}>{o.label}</option>
+        ))}
+      </select>
+    ) : null;
+
   // Axis scale/tick controls, stored as our own numeric keys on the channel
   // (axisMin/axisMax/majorStep/minorStep) and translated to a Vega-Lite scale +
   // explicit tick values by VegaChart. "interval" must be positive; empty clears.
@@ -747,12 +793,12 @@ export function Visualizer({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Entities ({spec.data.entities.ids.length})
           </p>
-          <select value={entType} onChange={(e) => applyBase(e.target.value as "districts" | "schools" | "both")} className={input}>
+          <select value={entType} onChange={(e) => applyBase(e.target.value as "districts" | "schools" | "both")} className={`${input} w-full`}>
             <option value="districts">Districts only</option>
             <option value="schools">Schools only</option>
             <option value="both">Districts &amp; schools</option>
           </select>
-          <select value={county} onChange={(e) => { setCounty(e.target.value); applyBase(entType, e.target.value); }} className={input}>
+          <select value={county} onChange={(e) => { setCounty(e.target.value); applyBase(entType, e.target.value); }} className={`${input} w-full`}>
             <option value="">All counties</option>
             {counties.map((c) => (<option key={c} value={c}>{c}</option>))}
           </select>
@@ -855,7 +901,7 @@ export function Visualizer({
               {years.map((y) => (<option key={y} value={y}>{y}</option>))}
             </select>
           </div>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search metrics…" className={input} />
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search metrics…" className={`${input} w-full`} />
           {grouped && (
             <div className="flex gap-3 text-xs text-slate-400">
               <button onClick={() => setOpenCats(new Set(grouped.map(([c]) => c)))} className="hover:text-slate-700">Expand all</button>
@@ -957,15 +1003,20 @@ export function Visualizer({
           )}
 
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fields</p>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600 dark:text-slate-300">Title</span>
+            <input value={spec.title ?? ""} onChange={(e) => setSpec((s) => ({ ...s, title: e.target.value || undefined }))} className={`${input} w-full`} />
+          </label>
           {PRIMARY_CHANNELS.map(({ ch, label, hint }) => {
             const def = spec.encoding?.[ch];
             return (
               <label key={ch} className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
-                <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
+                <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={`${input} w-full`}>
                   <option value="">— none —</option>
                   {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
                 </select>
+                <SortSelect ch={ch} />
                 {def?.field ? (
                   <input
                     value={def.title ?? ""}
@@ -998,10 +1049,11 @@ export function Visualizer({
               return (
                 <label key={ch} className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
-                  <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
+                  <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={`${input} w-full`}>
                     <option value="">none</option>
                     {opts.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
                   </select>
+                  <SortSelect ch={ch} />
                   <span className="text-[11px] text-slate-400">{hint}</span>
                 </label>
               );
@@ -1080,10 +1132,6 @@ export function Visualizer({
               <option value="app">App colors</option>
               <option value="print">Print (neutral)</option>
             </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">Title</span>
-            <input value={spec.title ?? ""} onChange={(e) => setSpec((s) => ({ ...s, title: e.target.value || undefined }))} className={input} />
           </label>
         </aside>
       </div>
