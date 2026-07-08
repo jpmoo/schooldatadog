@@ -345,6 +345,25 @@ export function Workshop({
         ),
     );
 
+  // Reorder just the calc's source columns among the slots they already hold,
+  // so the sheet's column order matches what the dialog shows.
+  function reorderSelected(orderedIds: string[]) {
+    setColumns((cs) => {
+      const idSet = new Set(orderedIds);
+      const slots: number[] = [];
+      cs.forEach((c, i) => {
+        if (idSet.has(c.id)) slots.push(i);
+      });
+      if (slots.length !== orderedIds.length) return cs;
+      const byId = new Map(cs.map((c) => [c.id, c]));
+      const arr = [...cs];
+      slots.forEach((slot, k) => {
+        arr[slot] = byId.get(orderedIds[k])!;
+      });
+      return arr;
+    });
+  }
+
   function reorder(fromId: string, toId: string) {
     setColumns((cs) => {
       const from = cs.findIndex((c) => c.id === fromId);
@@ -435,6 +454,14 @@ export function Workshop({
   }
 
   const dataColumns = columns.filter((c): c is DataColumn => c.kind === "data");
+  const districtOptions = useMemo(
+    () =>
+      entities
+        .filter((e) => e.type === "district")
+        .map((e) => ({ id: e.id, name: e.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [entities],
+  );
   const editingCalc =
     calcDialog?.editId != null
       ? (columns.find((c) => c.id === calcDialog.editId) as CalcColumn | undefined)
@@ -460,6 +487,7 @@ export function Workshop({
   const btn = "rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 
   return (
+    <>
     <DndContext
       sensors={sensors}
       onDragStart={onDragStart}
@@ -659,9 +687,14 @@ export function Workshop({
         )}
       </DragOverlay>
 
+    </DndContext>
+
       {calcDialog && (
         <CalcDialog
           sources={dataColumns.map((c) => ({ id: c.id, label: `${c.metric.name} (${c.year})` }))}
+          entities={districtOptions}
+          defaultRefId={homeDistrictId}
+          onReorderSources={reorderSelected}
           initial={
             editingCalc
               ? {
@@ -670,6 +703,7 @@ export function Workshop({
                   sourceIds: editingCalc.sourceIds,
                   weights: editingCalc.weights,
                   asPercent: editingCalc.asPercent,
+                  refEntityId: editingCalc.refEntityId ?? null,
                 }
               : undefined
           }
@@ -677,7 +711,7 @@ export function Workshop({
           onClose={() => setCalcDialog(null)}
         />
       )}
-    </DndContext>
+    </>
   );
 }
 

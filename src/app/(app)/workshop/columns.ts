@@ -1,6 +1,6 @@
 import type { MetricLite } from "@/lib/workshop/types";
 
-export type CalcType = "avg" | "change" | "avgchange" | "rank";
+export type CalcType = "avg" | "change" | "avgchange" | "rank" | "similarity";
 
 export type DataColumn = {
   id: string;
@@ -18,6 +18,7 @@ export type CalcColumn = {
   sourceIds: string[];
   weights: Record<string, number>;
   asPercent: boolean; // change / avgchange: show as % change instead of raw
+  refEntityId?: number | null; // similarity: entity every row is compared against
 };
 
 export type Column = DataColumn | CalcColumn;
@@ -27,6 +28,7 @@ export const CALC_LABELS: Record<CalcType, string> = {
   change: "Change across selected columns (first → last)",
   avgchange: "Average change, column to column",
   rank: "Percentile ranking (weighted)",
+  similarity: "Similarity to a district (weighted)",
 };
 
 /** A sort level is an ordered list of keys (Excel-style multi-column sort). */
@@ -89,6 +91,46 @@ export function computeCalc(
     return out;
   }
 
+  if (calc.calcType === "similarity") {
+    const ref = calc.refEntityId;
+    if (ref == null || !visibleEntityIds.includes(ref)) {
+      for (const id of visibleEntityIds) out[id] = null;
+      return out;
+    }
+    // z-score normalize each source across the visible set, then weighted
+    // Euclidean distance to the reference; map distance → 0-100 similarity.
+    const stats = sources.map((s) => {
+      const vals = visibleEntityIds
+        .map((id) => dataVal(s, id))
+        .filter((v): v is number => v !== null);
+      const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      const variance = vals.length
+        ? vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length
+        : 0;
+      return { s, mean, std: Math.sqrt(variance), w: calc.weights[s.id] ?? 1 };
+    });
+    const dist: Record<number, number | null> = {};
+    for (const id of visibleEntityIds) {
+      let acc = 0, wsum = 0;
+      for (const { s, mean, std, w } of stats) {
+        if (std === 0 || w <= 0) continue;
+        const ve = dataVal(s, id);
+        const vr = dataVal(s, ref);
+        if (ve === null || vr === null) continue;
+        const dz = (ve - mean) / std - (vr - mean) / std;
+        acc += w * dz * dz;
+        wsum += w;
+      }
+      dist[id] = wsum > 0 ? Math.sqrt(acc / wsum) : null;
+    }
+    const dmax = Math.max(0, ...Object.values(dist).filter((d): d is number => d !== null));
+    for (const id of visibleEntityIds) {
+      const d = dist[id];
+      out[id] = d === null ? null : dmax === 0 ? 100 : 100 * (1 - d / dmax);
+    }
+    return out;
+  }
+
   for (const id of visibleEntityIds) {
     const series = sources.map((s) => dataVal(s, id));
     const nums = series.filter((v): v is number => v !== null);
@@ -136,6 +178,7 @@ export function formatCalc(col: CalcColumn, v: number | null | undefined): strin
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   const round = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 1 });
   if (col.calcType === "rank") return round(v);
+  if (col.calcType === "similarity") return `${round(v)}%`;
   if ((col.calcType === "change" || col.calcType === "avgchange") && col.asPercent)
     return `${v > 0 ? "+" : ""}${round(v)}%`;
   return `${v > 0 && (col.calcType === "change" || col.calcType === "avgchange") ? "+" : ""}${round(v)}`;
