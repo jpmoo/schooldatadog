@@ -4,7 +4,9 @@ import { db } from "@/db";
 import { entities, facts, metrics } from "@/db/schema";
 import { getCurrentSession } from "@/lib/auth/session";
 
-const tiles = [
+type Tile = { title: string; body: string; href: string; adminOnly?: boolean };
+
+const tiles: Tile[] = [
   {
     title: "Data Workshop",
     body: "Build comparative spreadsheets — drag in metrics, add calculated fields, and filter.",
@@ -19,6 +21,12 @@ const tiles = [
     title: "Saved Groups",
     body: "Preview, rename, and delete the school & district groups you use as workshop filters.",
     href: "/groups",
+  },
+  {
+    title: "System Settings",
+    body: "Admin tools for AI/Ollama, the data dictionary, entities, and user accounts.",
+    href: "/admin",
+    adminOnly: true,
   },
 ];
 
@@ -73,7 +81,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {tiles.map((t) => (
+        {tiles
+          .filter((t) => !t.adminOnly || isAdmin)
+          .map((t) => (
           <Link
             key={t.title}
             href={t.href}

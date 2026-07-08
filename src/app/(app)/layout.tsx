@@ -14,7 +14,7 @@ export default async function AppLayout({
     <div className="flex min-h-full flex-1 flex-col bg-slate-50 dark:bg-slate-950">
       <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <nav className="flex items-center gap-6">
+          <nav className="flex items-center">
             <Link
               href="/"
               className="flex items-center gap-2 text-slate-900 dark:text-white"
@@ -26,26 +26,6 @@ export default async function AppLayout({
               />
               <span className="font-bold tracking-tight">School Data Dog</span>
             </Link>
-            <Link
-              href="/"
-              className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/workshop"
-              className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-            >
-              Data Workshop
-            </Link>
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-              >
-                System Settings
-              </Link>
-            )}
           </nav>
 
           <div className="flex items-center gap-4">
