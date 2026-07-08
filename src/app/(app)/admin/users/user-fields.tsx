@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/icon";
 import type { DistrictOption } from "@/lib/admin/districts";
 
 const inputClass =
@@ -7,6 +8,7 @@ const inputClass =
 
 const labelClass = "flex flex-col gap-1.5 text-sm";
 const labelText = "font-medium text-slate-700 dark:text-slate-200";
+const labelTextRow = `${labelText} flex items-center gap-1.5`;
 
 export type UserInitial = {
   name?: string | null;
@@ -45,7 +47,10 @@ export function UserFields({
       </label>
 
       <label className={labelClass}>
-        <span className={labelText}>Email</span>
+        <span className={labelTextRow}>
+          <Icon name="email" className="h-4 w-4 text-slate-400" />
+          Email
+        </span>
         <input
           name="email"
           type="email"
@@ -75,7 +80,10 @@ export function UserFields({
       </label>
 
       <label className={labelClass}>
-        <span className={labelText}>Role</span>
+        <span className={labelTextRow}>
+          <Icon name="role" className="h-4 w-4 text-slate-400" />
+          Role
+        </span>
         <select
           name="role"
           defaultValue={initial?.role ?? "user"}
