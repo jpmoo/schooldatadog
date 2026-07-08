@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -147,32 +147,41 @@ export function CalcDialog({
   const isSimilarity = calcType === "similarity";
   const showWeight = calcType === "rank" || isSimilarity;
 
-  // Seed an even split the first time a field is weighted, and give any brand-new
-  // column a default share — but never touch weights the user has already set
-  // (they balance to 100 themselves, watching the running total).
+  // Even-split the weights whenever the set of columns changes (adding or
+  // removing a column re-equalizes). A saved field's weights are kept on the
+  // first open so editing doesn't wipe them; manual edits after that stick.
   const idsKey = selectedInOrder.map((s) => s.id).join(",");
+  const firstForField = useRef(true);
   useEffect(() => {
-    if (!showWeight) return;
+    if (!showWeight) {
+      firstForField.current = true; // re-arm when leaving a weighted type
+      return;
+    }
     const ids = selectedInOrder.map((s) => s.id);
     if (ids.length === 0) return;
+    const isFirst = firstForField.current;
+    firstForField.current = false;
     setWeights((prev) => {
       const anyExisting = ids.some((id) => typeof prev[id] === "number");
-      if (!anyExisting) {
-        const split = evenSplit(100, ids.length);
-        const next: Record<string, number> = {};
-        ids.forEach((id, i) => (next[id] = split[i]));
-        return next;
-      }
-      const share = Math.round(100 / ids.length);
-      let changed = false;
-      const next = { ...prev };
-      for (const id of ids) {
-        if (typeof next[id] !== "number") {
-          next[id] = share;
-          changed = true;
+      // First open of an existing weighted field: keep its saved weights (fill
+      // any gaps), rather than resetting to even.
+      if (isFirst && anyExisting) {
+        const share = Math.round(100 / ids.length);
+        let changed = false;
+        const next = { ...prev };
+        for (const id of ids) {
+          if (typeof next[id] !== "number") {
+            next[id] = share;
+            changed = true;
+          }
         }
+        return changed ? next : prev;
       }
-      return changed ? next : prev;
+      // New field, or a column was added/removed → equalize.
+      const split = evenSplit(100, ids.length);
+      const next: Record<string, number> = {};
+      ids.forEach((id, i) => (next[id] = split[i]));
+      return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showWeight, idsKey]);
