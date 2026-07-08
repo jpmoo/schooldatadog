@@ -2,6 +2,7 @@
 
 import { requireUser } from "@/lib/auth/guards";
 import { getOllamaConfig } from "@/lib/settings";
+import { OLLAMA_KEEP_ALIVE } from "@/lib/ollama/warm";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -118,6 +119,7 @@ async function summarizeHistory(baseUrl: string, model: string, older: ChatMessa
         model,
         stream: false,
         options: { temperature: 0 },
+        keep_alive: OLLAMA_KEEP_ALIVE,
         messages: [
           {
             role: "system",
@@ -171,6 +173,7 @@ export async function worksheetChat(
         stream: false,
         format: "json",
         options: { temperature: 0.2 },
+        keep_alive: OLLAMA_KEEP_ALIVE,
         messages: [{ role: "system", content: systemPrompt(catalog, currentState) }, ...history],
       }),
       cache: "no-store",

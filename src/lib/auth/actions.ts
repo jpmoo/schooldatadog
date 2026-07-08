@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { logActivity } from "@/lib/activity/log";
 import { requireUser } from "@/lib/auth/guards";
+import { warmOllama } from "@/lib/ollama/warm";
 import { hashPassword, verifyPassword } from "./password";
 import { createSession, destroySession } from "./session";
 
@@ -100,6 +101,7 @@ export async function login(
 
   await createSession(user.id);
   await logActivity(user.id, "login");
+  void warmOllama(); // preload the model in the background so the first prompt is fast
   redirect("/");
 }
 
