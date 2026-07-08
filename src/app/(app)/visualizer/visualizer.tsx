@@ -937,8 +937,8 @@ export function Visualizer({
 
         {/* RIGHT — encoding */}
         <aside className="flex w-[22%] min-w-[220px] flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Chart type</p>
-          <select value={chartType} onChange={(e) => setChartType(e.target.value)} className={input}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Visualization type</p>
+          <select value={chartType} onChange={(e) => setChartType(e.target.value)} className={`${input} w-full`}>
             {MARK_OPTIONS.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
           </select>
           {chartType === "bar" && multiYear && (
