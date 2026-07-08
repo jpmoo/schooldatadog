@@ -506,54 +506,44 @@ export function Visualizer({
       return { ...s, encoding: enc };
     });
 
-  // Set the "increment" on an axis. For a binned axis (e.g. a histogram) this is
-  // the bin width; otherwise it's the tick spacing. 0/empty reverts to auto.
-  const setAxisStep = (ch: string, step: number) =>
+  // Axis scale/tick controls, stored as our own numeric keys on the channel
+  // (axisMin/axisMax/majorStep/minorStep) and translated to a Vega-Lite scale +
+  // explicit tick values by VegaChart. `key` "major" maps to a histogram's bin
+  // width when the axis is binned. Empty clears; only positive steps are kept.
+  const setAxisNum = (ch: string, key: "axisMin" | "axisMax" | "major" | "minor", raw: string) =>
     setSpec((s) => {
       const cur = s.encoding?.[ch] as Record<string, unknown> | undefined;
       if (!cur) return s;
       const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
       const next: Record<string, unknown> = { ...cur };
+      const n = Number(raw);
+      const empty = raw.trim() === "" || Number.isNaN(n);
+      const positiveOnly = key === "major" || key === "minor";
+      const ok = !empty && (!positiveOnly || n > 0);
       const binned = cur.bin !== undefined && cur.bin !== false;
-      if (binned) {
+
+      if (key === "major" && binned) {
         const bin = typeof cur.bin === "object" ? { ...(cur.bin as Record<string, unknown>) } : {};
-        if (step > 0) bin.step = step;
+        if (ok) bin.step = n;
         else delete bin.step;
         next.bin = Object.keys(bin).length ? bin : true;
       } else {
-        const axis = { ...((cur.axis as Record<string, unknown> | undefined) ?? {}) };
-        if (step > 0) axis.tickMinStep = step;
-        else delete axis.tickMinStep;
-        if (Object.keys(axis).length) next.axis = axis;
-        else delete next.axis;
+        const propKey = key === "major" ? "majorStep" : key === "minor" ? "minorStep" : key;
+        if (ok) next[propKey] = n;
+        else delete next[propKey];
       }
       enc[ch] = next;
       return { ...s, encoding: enc as ChartSpec["encoding"] };
     });
-  const axisStepOf = (ch: string) => {
+  const axisNumOf = (ch: string, key: "axisMin" | "axisMax" | "major" | "minor") => {
     const cur = spec.encoding?.[ch] as Record<string, unknown> | undefined;
     if (!cur) return "";
-    if (typeof cur.bin === "object") {
+    if (key === "major" && typeof cur.bin === "object") {
       const step = (cur.bin as Record<string, unknown>).step;
       return typeof step === "number" ? step : "";
     }
-    const a = cur.axis as Record<string, unknown> | undefined;
-    return typeof a?.tickMinStep === "number" ? a.tickMinStep : "";
-  };
-  // Minor gridline spacing (our own key; rendered by VegaChart).
-  const setAxisMinor = (ch: string, step: number) =>
-    setSpec((s) => {
-      const cur = s.encoding?.[ch] as Record<string, unknown> | undefined;
-      if (!cur) return s;
-      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
-      const next: Record<string, unknown> = { ...cur };
-      if (step > 0) next.minorStep = step;
-      else delete next.minorStep;
-      enc[ch] = next;
-      return { ...s, encoding: enc as ChartSpec["encoding"] };
-    });
-  const axisMinorOf = (ch: string) => {
-    const v = (spec.encoding?.[ch] as Record<string, unknown> | undefined)?.minorStep;
+    const propKey = key === "major" ? "majorStep" : key === "minor" ? "minorStep" : key;
+    const v = cur[propKey];
     return typeof v === "number" ? v : "";
   };
 
@@ -998,34 +988,29 @@ export function Visualizer({
           )}
           {(["x", "y"] as const).map((ax) =>
             spec.encoding?.[ax]?.field || spec.encoding?.[ax]?.aggregate ? (
-              <div key={ax} className="flex items-end gap-2">
-                <span className="mb-2 w-4 text-sm font-medium uppercase text-slate-500 dark:text-slate-400">{ax}</span>
-                <label className="flex flex-1 flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-                  Major
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={axisStepOf(ax)}
-                    onChange={(e) => setAxisStep(ax, Number(e.target.value))}
-                    placeholder="auto"
-                    className={`${input} w-full`}
-                    title="Spacing of labelled ticks / gridlines (bin width on a histogram)"
-                  />
-                </label>
-                <label className="flex flex-1 flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
-                  Minor
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={axisMinorOf(ax)}
-                    onChange={(e) => setAxisMinor(ax, Number(e.target.value))}
-                    placeholder="none"
-                    className={`${input} w-full`}
-                    title="Spacing of finer, unlabelled gridlines"
-                  />
-                </label>
+              <div key={ax} className="flex flex-col gap-1">
+                <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">{ax} axis</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["axisMin", "Min", "auto", "Lowest value on the axis"],
+                    ["axisMax", "Max", "auto", "Highest value on the axis"],
+                    ["major", "Major", "auto", "Spacing of labelled ticks / gridlines (bin width on a histogram)"],
+                    ["minor", "Minor", "none", "Spacing of finer, unlabelled gridlines between majors"],
+                  ] as const).map(([key, label, ph, tip]) => (
+                    <label key={key} className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                      {label}
+                      <input
+                        type="number"
+                        step="any"
+                        value={axisNumOf(ax, key)}
+                        onChange={(e) => setAxisNum(ax, key, e.target.value)}
+                        placeholder={ph}
+                        className={`${input} w-full`}
+                        title={tip}
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
             ) : null,
           )}

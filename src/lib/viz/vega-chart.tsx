@@ -32,6 +32,16 @@ function themeConfig(theme: ChartSpec["theme"]) {
   };
 }
 
+/** Tick positions lo, lo+step, … up to (and including) hi. Capped for safety. */
+function enumerateTicks(lo: number, hi: number, step: number): number[] {
+  const out: number[] = [];
+  const count = Math.floor((hi - lo) / step + 1e-9);
+  for (let i = 0; i <= count && out.length < 2000; i++) {
+    out.push(Number((lo + i * step).toFixed(6)));
+  }
+  return out;
+}
+
 /** Compile a ChartSpec's encoding layer + resolved rows into a Vega-Lite spec.
  * `labels` maps a field id / built-in to its friendly name so axes and legends
  * read nicely; an explicit channel `title` always wins. `width`/`height` are the
@@ -47,52 +57,103 @@ function toVegaLite(
   const faceted = "column" in enc || "row" in enc || "facet" in enc;
   const hideLegend = spec.showLegend === false;
   const LEGEND_CHANNELS = new Set(["color", "size", "shape", "opacity", "fill", "stroke"]);
+
+  // Resolve our custom axis controls (axisMin/axisMax/majorStep/minorStep) on a
+  // plain quantitative x/y axis into a scale domain + explicit tick positions.
+  type AxisMeta = { lo?: number; hi?: number; major: number; minor: number; dMin?: number; dMax?: number };
+  const axisMeta: Record<string, AxisMeta> = {};
+  if (!faceted) {
+    for (const ax of ["x", "y"] as const) {
+      const d = (enc[ax] ?? {}) as Record<string, unknown>;
+      if (d.type !== "quantitative" || "bin" in d) continue;
+      const dMin = typeof d.axisMin === "number" ? d.axisMin : undefined;
+      const dMax = typeof d.axisMax === "number" ? d.axisMax : undefined;
+      const major = typeof d.majorStep === "number" ? d.majorStep : 0;
+      const minor = typeof d.minorStep === "number" ? d.minorStep : 0;
+      let dataLo: number | undefined;
+      let dataHi: number | undefined;
+      if (typeof d.field === "string" && !("aggregate" in d)) {
+        const field = d.field;
+        const nums = rows.map((r) => r[field]).filter((v): v is number => typeof v === "number");
+        if (nums.length) {
+          dataLo = Math.min(...nums, 0);
+          dataHi = Math.max(...nums);
+        }
+      }
+      axisMeta[ax] = { lo: dMin ?? dataLo, hi: dMax ?? dataHi, major, minor, dMin, dMax };
+    }
+  }
+
   const encoding = Object.fromEntries(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
       const friendly = typeof d.field === "string" ? labels[d.field] : undefined;
-      // minorStep is our own key (minor gridlines); never pass it to Vega-Lite.
-      const { minorStep: _minor, ...rest } = d;
-      void _minor;
+      // Strip our own keys; they're never valid Vega-Lite channel properties.
+      const rest = { ...d };
+      delete rest.axisMin;
+      delete rest.axisMax;
+      delete rest.majorStep;
+      delete rest.minorStep;
       const title = (typeof d.title === "string" ? d.title : undefined) ?? friendly;
+
+      const meta = axisMeta[ch];
+      let axis = (rest.axis && typeof rest.axis === "object" ? { ...(rest.axis as object) } : undefined) as
+        | Record<string, unknown>
+        | undefined;
+      let scale = (rest.scale && typeof rest.scale === "object" ? { ...(rest.scale as object) } : undefined) as
+        | Record<string, unknown>
+        | undefined;
+      if (meta) {
+        if (meta.dMin !== undefined || meta.dMax !== undefined) {
+          scale = scale ?? {};
+          if (meta.dMin !== undefined) scale.domainMin = meta.dMin;
+          if (meta.dMax !== undefined) scale.domainMax = meta.dMax;
+        }
+        if (meta.major > 0 && meta.lo !== undefined && meta.hi !== undefined && meta.hi > meta.lo) {
+          const vals = enumerateTicks(meta.lo, meta.hi, meta.major);
+          if (vals.length) {
+            axis = axis ?? {};
+            axis.values = vals;
+            axis.grid = true;
+          }
+        }
+      }
       return [
         ch,
         {
           ...rest,
           ...(title ? { title } : {}),
+          ...(axis ? { axis } : {}),
+          ...(scale ? { scale } : {}),
           ...(hideLegend && LEGEND_CHANNELS.has(ch) ? { legend: null } : {}),
         },
       ];
     }),
   );
 
-  // Minor gridlines: Vega-Lite has no native minor ticks, so for a plain
-  // quantitative x/y axis we draw evenly-spaced rules from the data extent.
+  // Minor gridlines: Vega-Lite has no native minor ticks, so draw evenly-spaced
+  // rules between the (explicit or data-derived) axis bounds, sharing the scale.
   const minorLayers: Record<string, unknown>[] = [];
   if (!faceted) {
     for (const ax of ["x", "y"] as const) {
-      const d = (enc[ax] ?? {}) as Record<string, unknown>;
-      const step = typeof d.minorStep === "number" ? d.minorStep : 0;
-      const field = d.field;
-      if (
-        step > 0 &&
-        typeof field === "string" &&
-        d.type === "quantitative" &&
-        !("bin" in d) &&
-        !("aggregate" in d)
-      ) {
-        const nums = rows.map((r) => r[field]).filter((v): v is number => typeof v === "number");
-        if (nums.length) {
-          const lo = Math.min(...nums, 0);
-          const hi = Math.max(...nums, 0);
-          const start = Math.floor(lo / step) * step;
-          const stop = Math.ceil(hi / step) * step + step / 2;
-          minorLayers.push({
-            data: { sequence: { start, stop, step, as: "_g" } },
-            mark: { type: "rule", stroke: "#cbd5e1", strokeWidth: 0.4, opacity: 0.6 },
-            encoding: { [ax]: { field: "_g", type: "quantitative", axis: null } },
-          });
-        }
+      const meta = axisMeta[ax];
+      if (meta && meta.minor > 0 && meta.lo !== undefined && meta.hi !== undefined && meta.hi > meta.lo) {
+        const vals = enumerateTicks(meta.lo, meta.hi, meta.minor);
+        const domain: Record<string, unknown> = {};
+        if (meta.dMin !== undefined) domain.domainMin = meta.dMin;
+        if (meta.dMax !== undefined) domain.domainMax = meta.dMax;
+        minorLayers.push({
+          data: { values: vals.map((v) => ({ _g: v })) },
+          mark: { type: "rule", stroke: "#cbd5e1", strokeWidth: 0.4, opacity: 0.6 },
+          encoding: {
+            [ax]: {
+              field: "_g",
+              type: "quantitative",
+              axis: null,
+              ...(Object.keys(domain).length ? { scale: domain } : {}),
+            },
+          },
+        });
       }
     }
   }
