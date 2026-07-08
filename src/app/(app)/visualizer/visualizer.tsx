@@ -582,6 +582,27 @@ export function Visualizer({
     return !!c && c.type === "quantitative" && !("bin" in c);
   };
 
+  // Histogram bucketing on the x axis: a fixed range size (bin.step) OR a target
+  // number of buckets (bin.maxbins) — never both. Empty/invalid → auto (bin:true).
+  const binOf = () => {
+    const b = (spec.encoding?.x as Record<string, unknown> | undefined)?.bin;
+    const o = b && typeof b === "object" ? (b as Record<string, unknown>) : {};
+    return {
+      step: typeof o.step === "number" ? o.step : "",
+      maxbins: typeof o.maxbins === "number" ? o.maxbins : "",
+    };
+  };
+  const setBin = (key: "step" | "maxbins", raw: string) =>
+    setSpec((s) => {
+      const cur = s.encoding?.x as Record<string, unknown> | undefined;
+      if (!cur) return s;
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      const n = Number(raw);
+      const ok = raw.trim() !== "" && !Number.isNaN(n) && n > 0;
+      enc.x = { ...cur, bin: ok ? { [key]: n } : true };
+      return { ...s, encoding: enc as ChartSpec["encoding"] };
+    });
+
   // "Chart type" is the mark, plus a "histogram" preset (binned x + count y).
   const chartType = (() => {
     const x = spec.encoding?.x as Record<string, unknown> | undefined;
@@ -1125,6 +1146,40 @@ export function Visualizer({
                 </span>
               </div>
             ) : null,
+          )}
+          {chartType === "histogram" && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Buckets (x)</span>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  Range size
+                  <input
+                    type="number"
+                    step="any"
+                    value={binOf().step}
+                    disabled={binOf().maxbins !== ""}
+                    onChange={(e) => setBin("step", e.target.value)}
+                    placeholder="auto"
+                    className={`${input} w-full disabled:opacity-40`}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  # of buckets
+                  <input
+                    type="number"
+                    step="1"
+                    value={binOf().maxbins}
+                    disabled={binOf().step !== ""}
+                    onChange={(e) => setBin("maxbins", e.target.value)}
+                    placeholder="auto"
+                    className={`${input} w-full disabled:opacity-40`}
+                  />
+                </label>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                Set one or the other (or leave both blank for automatic).
+              </span>
+            </div>
           )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Palette</span>
