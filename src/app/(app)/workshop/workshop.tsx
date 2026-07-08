@@ -227,6 +227,13 @@ export function Workshop({
     return () => clearTimeout(t);
   }, [query, year]);
 
+  // Keep the saved-groups dropdown in sync with the server after a mutation
+  // (the create action revalidates, delivering a fresh initialGroups here) so a
+  // newly saved group appears without a manual page refresh.
+  useEffect(() => {
+    setGroups(initialGroups);
+  }, [initialGroups]);
+
   // ── derived data ──
   const visibleEntities = useMemo(
     () =>
