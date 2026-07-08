@@ -2,25 +2,29 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { entities, facts, metrics } from "@/db/schema";
+import { Icon, type IconName } from "@/components/icon";
 import { getCurrentSession } from "@/lib/auth/session";
 
-type Tile = { title: string; body: string; href: string; adminOnly?: boolean };
+type Tile = { title: string; body: string; href: string; icon?: IconName; adminOnly?: boolean };
 
 const tiles: Tile[] = [
   {
     title: "Data Workshop",
     body: "Build comparative spreadsheets — drag in metrics, add calculated fields, and filter.",
     href: "/workshop",
+    icon: "dataWorkshop",
   },
   {
     title: "Saved Views",
     body: "Reopen, rename, or delete full workshop sessions — filters, sorts, and calculated fields.",
     href: "/views",
+    icon: "savedItems",
   },
   {
     title: "Saved Groups",
     body: "Preview, rename, and delete the school & district groups you use as workshop filters.",
     href: "/groups",
+    icon: "saveViewOrGroup",
   },
   {
     title: "System Settings",
@@ -89,7 +93,10 @@ export default async function DashboardPage() {
             href={t.href}
             className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
           >
-            <h2 className="font-semibold text-slate-900 dark:text-white">{t.title}</h2>
+            <h2 className="flex items-center gap-2.5 font-semibold text-slate-900 dark:text-white">
+              {t.icon && <Icon name={t.icon} className="h-7 w-7 text-indigo-500" />}
+              {t.title}
+            </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">{t.body}</p>
           </Link>
         ))}

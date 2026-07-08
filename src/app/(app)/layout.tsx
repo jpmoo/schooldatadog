@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 import { requireUser } from "@/lib/auth/guards";
 import { logout } from "@/lib/auth/actions";
 
@@ -40,8 +41,9 @@ export default async function AppLayout({
             <form action={logout}>
               <button
                 type="submit"
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
+                <Icon name="logout" className="h-4 w-4" />
                 Sign out
               </button>
             </form>

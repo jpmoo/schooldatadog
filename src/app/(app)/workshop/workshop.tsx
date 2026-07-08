@@ -12,6 +12,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { Icon } from "@/components/icon";
 import { createGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import { createView } from "@/lib/views/actions";
@@ -71,9 +72,10 @@ function CalcSource() {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className="cursor-grab rounded-lg border border-dashed border-indigo-400 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 active:cursor-grabbing dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
+      className="flex cursor-grab items-center gap-2 rounded-lg border border-dashed border-indigo-400 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 active:cursor-grabbing dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
     >
-      + Calculated Field <span className="text-xs font-normal">(drag onto the sheet)</span>
+      <Icon name="calcualtedField" className="h-4 w-4" />
+      Calculated Field <span className="text-xs font-normal">(drag onto the sheet)</span>
     </div>
   );
 }
@@ -763,6 +765,10 @@ export function Workshop({
 
   // Fixed height keeps buttons and selects the same size in the filter row.
   const btn = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+  const iconBtn =
+    "flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800";
+  const iconBtnActive =
+    "flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-500 bg-indigo-600 text-white";
 
   // With no explicit sort on a level, rows fall back to A→Z by name — surface
   // that default in the name column header.
@@ -778,9 +784,27 @@ export function Workshop({
       onDragCancel={() => setDragging(null)}
     >
       <div className="flex h-[calc(100vh-8rem)] gap-3" onClick={() => ctx && setCtx(null)}>
-        {/* LEFT 30% — hideable */}
-        {!paneHidden && (
+        {/* LEFT — metrics panel, collapsible to a slim strip on the left edge */}
+        {paneHidden ? (
+          <button
+            onClick={() => setPaneHidden(false)}
+            title="Show metrics panel"
+            className="flex w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:hover:text-slate-200"
+          >
+            <Icon name="showHidePanel" flip className="h-6 w-6" />
+          </button>
+        ) : (
         <aside className="flex w-[30%] min-w-[260px] flex-col gap-3 overflow-hidden">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold uppercase tracking-wide text-slate-400">Metrics</span>
+            <button
+              onClick={() => setPaneHidden(true)}
+              title="Hide metrics panel"
+              className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+            >
+              <Icon name="showHidePanel" className="h-6 w-6" />
+            </button>
+          </div>
           <CalcSource />
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-slate-600 dark:text-slate-300">Year</label>
@@ -858,13 +882,6 @@ export function Workshop({
         {/* RIGHT 70% (full width when the left pane is hidden) */}
         <section className="flex flex-1 flex-col gap-2 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 text-sm dark:border-slate-800 dark:bg-slate-900">
-            <button
-              onClick={() => setPaneHidden((v) => !v)}
-              className={btn}
-              title={paneHidden ? "Show metrics panel" : "Hide metrics panel (full-width sheet)"}
-            >
-              {paneHidden ? "⟩ Panel" : "⟨ Panel"}
-            </button>
             <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)} className={btn}>
               <option value="districts">Districts only</option>
               <option value="schools">Schools only</option>
@@ -878,20 +895,6 @@ export function Workshop({
                 </option>
               ))}
             </select>
-            <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
-              Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
-            </button>
-            <button
-              onClick={() => setHideEmpty((v) => !v)}
-              className={
-                hideEmpty
-                  ? "h-9 rounded-lg border border-indigo-500 bg-indigo-600 px-2.5 font-medium text-white"
-                  : btn
-              }
-              title="Hide rows that have no data in any column"
-            >
-              {hideEmpty ? "Empty rows hidden" : "Hide empty rows"}
-            </button>
             <select
               value={groupFilter}
               onChange={(e) => applyGroup(e.target.value)}
@@ -905,34 +908,45 @@ export function Workshop({
                 </option>
               ))}
             </select>
+            <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
+              Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
+            </button>
+            <button
+              onClick={() => setHideEmpty((v) => !v)}
+              aria-pressed={hideEmpty}
+              className={hideEmpty ? iconBtnActive : iconBtn}
+              title={hideEmpty ? "Show empty rows" : "Hide rows with no data in any column"}
+            >
+              <Icon name="showHideEmpty" />
+            </button>
             {homeDistrictId != null && (
               <button
                 onClick={viewMode === "schools" ? cycleHomeSchool : scrollToHome}
-                className="h-9 rounded-lg bg-indigo-600 px-3 font-medium text-white hover:bg-indigo-500"
+                className={iconBtn}
                 title={
                   viewMode === "schools"
                     ? "Step through the schools in my district"
                     : "Scroll to my district"
                 }
               >
-                {viewMode === "schools" ? "⌖ My schools" : "⌖ My district"}
+                <Icon name="myDistrictSchools" />
               </button>
             )}
             <button
               onClick={() => setViewDialog(true)}
               disabled={columns.length === 0}
-              className="h-9 rounded-lg border border-slate-300 px-3 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className={iconBtn}
               title="Save all filters, sorts & columns as a named view"
             >
-              💾 Save view
+              <Icon name="saveViewOrGroup" />
             </button>
             <button
               onClick={() => setConfirmClear(true)}
               disabled={columns.length === 0 && districtSort.length === 0 && schoolSort.length === 0 && hidden.size === 0 && !county && !groupFilter}
-              className="h-9 rounded-lg border border-slate-300 px-3 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className={iconBtn}
               title="Clear all columns, filters, and sorts"
             >
-              🧹 Clear
+              <Icon name="clear" />
             </button>
             <span className="ml-auto text-xs text-slate-400">
               {viewName ? <span className="mr-2 text-indigo-500">“{viewName}”</span> : null}

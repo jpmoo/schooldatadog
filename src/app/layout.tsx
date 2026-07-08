@@ -25,14 +25,23 @@ export default function RootLayout({
   // Prefix static assets referenced from CSS with basePath (Next doesn't rewrite
   // url() in stylesheets). Empty in dev, "/schooldatadog" behind the proxy.
   const basePath = (process.env.BASE_PATH ?? "").trim().replace(/\/+$/, "");
-  const brandLogoVar = {
+  // One CSS var per icon (mask URL); the <Icon> component references var(--i-<name>).
+  const iconNames = [
+    "calcualtedField", "clear", "dashboard", "dataWorkshop", "logout",
+    "myDistrictSchools", "saveViewOrGroup", "savedItems", "showHideEmpty",
+    "showHidePanel", "visualizer",
+  ];
+  const cssVars = {
     "--brand-logo-src": `url("${basePath}/SchoolDataDog.svg")`,
+    ...Object.fromEntries(
+      iconNames.map((n) => [`--i-${n}`, `url("${basePath}/icons/${n}.svg")`]),
+    ),
   } as React.CSSProperties;
 
   return (
     <html
       lang="en"
-      style={brandLogoVar}
+      style={cssVars}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

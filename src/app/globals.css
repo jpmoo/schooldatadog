@@ -43,3 +43,17 @@ body {
   mask: var(--brand-logo-src, url("/SchoolDataDog.svg")) center / contain
     no-repeat;
 }
+
+/*
+ * Monochrome UI icons (public/icons/*.svg), same mask-with-currentColor trick as
+ * the logo. The <Icon> component sets --icon to var(--i-<name>) (defined per icon
+ * in the root layout so the URL carries basePath), and colors follow the text
+ * color — so an icon turns white on an active/indigo button, slate otherwise.
+ */
+.icon {
+  display: inline-block;
+  flex: none;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}

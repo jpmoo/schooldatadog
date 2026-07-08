@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guards";
+import { Icon } from "@/components/icon";
 import { DeleteForm } from "@/app/(app)/_components/delete-form";
 import { deleteGroup, renameGroup } from "@/lib/groups/actions";
 import { getUserGroupsWithEntities } from "@/lib/groups/queries";
@@ -17,7 +18,10 @@ export default async function GroupsPage() {
         >
           ← Dashboard
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Saved Groups</h1>
+        <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
+          <Icon name="saveViewOrGroup" className="h-7 w-7 text-indigo-500" />
+          Saved Groups
+        </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
           Collections of schools &amp; districts you can apply as a one-click filter in the{" "}
           <Link href="/workshop" className="text-indigo-600 hover:underline dark:text-indigo-400">
