@@ -61,6 +61,7 @@ export type SavedViewState = {
   schoolSort: SortKey[];
   groupFilter: string;
   columns: SavedColumn[];
+  hideEmpty?: boolean;
 };
 
 function dataVal(col: DataColumn, entityId: number): number | null {

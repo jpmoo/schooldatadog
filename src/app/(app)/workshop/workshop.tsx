@@ -192,6 +192,7 @@ export function Workshop({
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [entityPanel, setEntityPanel] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [hideEmpty, setHideEmpty] = useState(false);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [groups, setGroups] = useState<GroupLite[]>(initialGroups);
@@ -289,8 +290,13 @@ export function Workshop({
     const cmpS = (a: WorkshopEntity, b: WorkshopEntity) =>
       compareBySortKeys(schoolSort, valueOf, a, b);
 
+    // An entity is "empty" when every present column is null for it.
+    const isEmpty = (id: number) => columns.length > 0 && columns.every((c) => getVal(c, id) === null);
+    const show = (id: number) => !hideEmpty || !isEmpty(id);
+
     if (viewMode === "districts") {
       return [...visibleEntities]
+        .filter((e) => show(e.id))
         .sort(cmpD)
         .map((e) => ({ entity: e, type: "district" as const, collapsible: false }));
     }
@@ -306,7 +312,9 @@ export function Workshop({
     const districtIds = new Set(districts.map((d) => d.id));
     const out: Row[] = [];
     for (const d of districts) {
-      const kids = byParent.get(d.id) ?? [];
+      const kids = (byParent.get(d.id) ?? []).filter((s) => show(s.id));
+      // Keep a district if it has data itself or has any shown school under it.
+      if (!show(d.id) && kids.length === 0) continue;
       out.push({ entity: d, type: "district", collapsible: kids.length > 0 });
       if (kids.length && !collapsed.has(d.id)) {
         for (const s of [...kids].sort(cmpS))
@@ -314,13 +322,13 @@ export function Workshop({
       }
     }
     const orphans = schools.filter(
-      (s) => s.parentDistrictId == null || !districtIds.has(s.parentDistrictId),
+      (s) => (s.parentDistrictId == null || !districtIds.has(s.parentDistrictId)) && show(s.id),
     );
     for (const s of orphans.sort(cmpS))
       out.push({ entity: s, type: "school", collapsible: false });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns]);
+  }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns, hideEmpty]);
 
   // Bring a just-added column into view (jump the sheet's horizontal scroll).
   function scrollToColumn(id: string) {
@@ -575,6 +583,7 @@ export function Workshop({
       districtSort,
       schoolSort,
       groupFilter,
+      hideEmpty,
       columns: columns.map((c) =>
         c.kind === "data"
           ? { id: c.id, kind: "data", metric: c.metric, year: c.year, subgroup: c.subgroup }
@@ -611,6 +620,7 @@ export function Workshop({
     setDistrictSort(v.districtSort);
     setSchoolSort(v.schoolSort);
     setGroupFilter(v.groupFilter);
+    setHideEmpty(v.hideEmpty ?? false);
     const cols: Column[] = v.columns.map((c) =>
       c.kind === "data"
         ? {
@@ -638,6 +648,7 @@ export function Workshop({
     setCounty("");
     setGroupFilter("");
     setViewMode("districts");
+    setHideEmpty(false);
     setViewName(null);
     setConfirmClear(false);
   }
@@ -838,6 +849,17 @@ export function Workshop({
             <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
               Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
             </button>
+            <button
+              onClick={() => setHideEmpty((v) => !v)}
+              className={
+                hideEmpty
+                  ? "h-9 rounded-lg border border-indigo-500 bg-indigo-600 px-2.5 font-medium text-white"
+                  : btn
+              }
+              title="Hide rows that have no data in any column"
+            >
+              {hideEmpty ? "Empty rows hidden" : "Hide empty rows"}
+            </button>
             <select
               value={groupFilter}
               onChange={(e) => applyGroup(e.target.value)}
@@ -914,45 +936,45 @@ export function Workshop({
               <table className="border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr>
-                    {/* select-all — narrow, no title */}
-                    <th className="sticky left-0 top-0 z-30 w-[40px] border-b border-slate-200 bg-slate-100 px-2 py-2 text-center dark:border-slate-800 dark:bg-slate-800">
-                      <input
-                        type="checkbox"
-                        title="Select all shown"
-                        checked={rows.length > 0 && rows.every((r) => selected.has(r.entity.id))}
-                        onChange={(ev) =>
-                          setSelected((prev) => {
-                            const n = new Set(prev);
-                            for (const r of rows) {
-                              if (ev.target.checked) n.add(r.entity.id);
-                              else n.delete(r.entity.id);
+                    {/* frozen left block: select-all · (rank) · name — one sticky
+                        cell (no titles on the first two), so there are no seams */}
+                    <th className="sticky left-0 top-0 z-30 border-b border-slate-200 bg-slate-100 p-0 dark:border-slate-800 dark:bg-slate-800">
+                      <div className="flex items-stretch">
+                        <div className="flex w-[40px] items-center justify-center py-2">
+                          <input
+                            type="checkbox"
+                            title="Select all shown"
+                            checked={rows.length > 0 && rows.every((r) => selected.has(r.entity.id))}
+                            onChange={(ev) =>
+                              setSelected((prev) => {
+                                const n = new Set(prev);
+                                for (const r of rows) {
+                                  if (ev.target.checked) n.add(r.entity.id);
+                                  else n.delete(r.entity.id);
+                                }
+                                return n;
+                              })
                             }
-                            return n;
-                          })
-                        }
-                      />
-                    </th>
-                    {/* rank — narrow, no title */}
-                    <th className="sticky left-[39px] top-0 z-30 w-[48px] border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800" />
-                    {/* school / district name */}
-                    <th
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setCtx({ key: "name", kind: "name", x: e.clientX, y: e.clientY });
-                      }}
-                      className="sticky left-[86px] top-0 z-30 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
-                    >
-                      School / District{" "}
-                      {sortLabel("name") ? (
-                        <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
-                      ) : nameSortsByDefault ? (
-                        <span
-                          className="font-normal text-slate-400"
-                          title="Default sort: name A→Z"
+                          />
+                        </div>
+                        <div className="w-[48px]" />
+                        <div
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setCtx({ key: "name", kind: "name", x: e.clientX, y: e.clientY });
+                          }}
+                          className="min-w-[240px] flex-1 cursor-context-menu px-3 py-2 text-left"
                         >
-                          A→Z
-                        </span>
-                      ) : null}
+                          School / District{" "}
+                          {sortLabel("name") ? (
+                            <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
+                          ) : nameSortsByDefault ? (
+                            <span className="font-normal text-slate-400" title="Default sort: name A→Z">
+                              A→Z
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
                     </th>
                     {columns.map((col) => (
                       <ColumnHeader
@@ -982,41 +1004,42 @@ export function Workshop({
                       : "bg-white dark:bg-slate-950";
                     return (
                       <tr key={e.id} data-eid={e.id} className={isHome ? "bg-indigo-50 dark:bg-indigo-950/40" : ""}>
-                        <td className={`sticky left-0 z-20 w-[40px] border-b border-slate-100 px-2 py-1.5 text-center dark:border-slate-800 ${stickyBg}`}>
-                          <input
-                            type="checkbox"
-                            className="align-middle"
-                            checked={selected.has(e.id)}
-                            onChange={() => toggleSelected(e.id)}
-                          />
-                        </td>
-                        <td className={`sticky left-[39px] z-20 w-[48px] border-b border-slate-100 px-1 py-1.5 text-center text-xs tabular-nums text-slate-400 dark:border-slate-800 ${stickyBg}`}>
-                          {i + 1}
-                        </td>
-                        <td
-                          className={`sticky left-[86px] z-20 min-w-[240px] border-b border-slate-100 px-3 py-1.5 dark:border-slate-800 ${stickyBg} ${
-                            type === "school" ? "pl-8" : ""
-                          }`}
-                        >
-                          {collapsible && (
-                            <button
-                              onClick={() =>
-                                setCollapsed((prev) => {
-                                  const n = new Set(prev);
-                                  if (n.has(e.id)) n.delete(e.id);
-                                  else n.add(e.id);
-                                  return n;
-                                })
-                              }
-                              className="mr-1 text-slate-400 hover:text-slate-700"
+                        <td className={`sticky left-0 z-20 border-b border-slate-100 p-0 dark:border-slate-800 ${stickyBg}`}>
+                          <div className="flex items-stretch">
+                            <div className="flex w-[40px] items-center justify-center py-1.5">
+                              <input
+                                type="checkbox"
+                                checked={selected.has(e.id)}
+                                onChange={() => toggleSelected(e.id)}
+                              />
+                            </div>
+                            <div className="flex w-[48px] items-center justify-center py-1.5 text-xs tabular-nums text-slate-400">
+                              {i + 1}
+                            </div>
+                            <div
+                              className={`min-w-[240px] flex-1 px-3 py-1.5 ${type === "school" ? "pl-8" : ""}`}
                             >
-                              {collapsed.has(e.id) ? "▸" : "▾"}
-                            </button>
-                          )}
-                          <span className={`${type === "district" ? "font-medium" : ""} text-slate-800 dark:text-slate-100`}>
-                            {e.name}
-                          </span>
-                          {isHome && <span className="ml-1 text-xs font-medium text-indigo-500">· home</span>}
+                              {collapsible && (
+                                <button
+                                  onClick={() =>
+                                    setCollapsed((prev) => {
+                                      const n = new Set(prev);
+                                      if (n.has(e.id)) n.delete(e.id);
+                                      else n.add(e.id);
+                                      return n;
+                                    })
+                                  }
+                                  className="mr-1 text-slate-400 hover:text-slate-700"
+                                >
+                                  {collapsed.has(e.id) ? "▸" : "▾"}
+                                </button>
+                              )}
+                              <span className={`${type === "district" ? "font-medium" : ""} text-slate-800 dark:text-slate-100`}>
+                                {e.name}
+                              </span>
+                              {isHome && <span className="ml-1 text-xs font-medium text-indigo-500">· home</span>}
+                            </div>
+                          </div>
                         </td>
                         {columns.map((col) => {
                           const v = getVal(col, e.id);
