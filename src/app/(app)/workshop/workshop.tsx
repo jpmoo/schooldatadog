@@ -215,6 +215,7 @@ export function Workshop({
   const [subgroupCol, setSubgroupCol] = useState<DataColumn | null>(null);
   const [paneHidden, setPaneHidden] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const homeCycleRef = useRef(0); // schools-only: which home-district school to jump to next
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -536,6 +537,24 @@ export function Workshop({
         ?.querySelector(`[data-eid="${homeDistrictId}"]`)
         ?.scrollIntoView({ block: "center", behavior: "smooth" });
     }, 80);
+  }
+
+  // Schools-only: step through the home district's schools one per click, wrapping.
+  function cycleHomeSchool() {
+    if (homeDistrictId == null) return;
+    const homeSchools = rows.filter((r) => r.entity.parentDistrictId === homeDistrictId);
+    if (homeSchools.length === 0) {
+      if (county) setCounty(""); // reveal them; click again to start cycling
+      return;
+    }
+    const idx = homeCycleRef.current % homeSchools.length;
+    homeCycleRef.current = idx + 1;
+    const eid = homeSchools[idx].entity.id;
+    setTimeout(() => {
+      scrollRef.current
+        ?.querySelector(`[data-eid="${eid}"]`)
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
   }
 
   // ── selection & saved groups ──
@@ -884,8 +903,16 @@ export function Workshop({
               ))}
             </select>
             {homeDistrictId != null && (
-              <button onClick={scrollToHome} className="h-9 rounded-lg bg-indigo-600 px-3 font-medium text-white hover:bg-indigo-500">
-                ⌖ My district
+              <button
+                onClick={viewMode === "schools" ? cycleHomeSchool : scrollToHome}
+                className="h-9 rounded-lg bg-indigo-600 px-3 font-medium text-white hover:bg-indigo-500"
+                title={
+                  viewMode === "schools"
+                    ? "Step through the schools in my district"
+                    : "Scroll to my district"
+                }
+              >
+                {viewMode === "schools" ? "⌖ My schools" : "⌖ My district"}
               </button>
             )}
             <button
@@ -1132,7 +1159,12 @@ export function Workshop({
 
       {calcDialog && (
         <CalcDialog
-          sources={dataColumns.map((c) => ({ id: c.id, label: `${c.metric.name} (${c.year})` }))}
+          sources={dataColumns.map((c) => ({
+            id: c.id,
+            label: `${c.metric.name} (${c.year})${
+              c.subgroup !== ALL_STUDENTS ? ` · ${c.subgroup}` : ""
+            }`,
+          }))}
           entities={districtOptions}
           defaultRefId={homeDistrictId}
           onReorderSources={reorderSelected}
