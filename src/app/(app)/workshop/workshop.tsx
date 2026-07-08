@@ -998,7 +998,11 @@ export function Workshop({
                 </thead>
                 <tbody>
                   {rows.map(({ entity: e, type, collapsible }, i) => {
-                    const isHome = e.id === homeDistrictId;
+                    const isHomeDistrict = e.id === homeDistrictId;
+                    // Highlight the home district and every school within it.
+                    const isHome =
+                      homeDistrictId != null &&
+                      (isHomeDistrict || e.parentDistrictId === homeDistrictId);
                     const stickyBg = isHome
                       ? "bg-indigo-50 dark:bg-indigo-950/40"
                       : "bg-white dark:bg-slate-950";
@@ -1037,7 +1041,7 @@ export function Workshop({
                               <span className={`${type === "district" ? "font-medium" : ""} text-slate-800 dark:text-slate-100`}>
                                 {e.name}
                               </span>
-                              {isHome && <span className="ml-1 text-xs font-medium text-indigo-500">· home</span>}
+                              {isHomeDistrict && <span className="ml-1 text-xs font-medium text-indigo-500">· home</span>}
                             </div>
                           </div>
                         </td>
