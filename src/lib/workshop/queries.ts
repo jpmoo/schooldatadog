@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, inArray, isNotNull } from "drizzle-orm";
+import { asc, desc, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { entities, facts } from "@/db/schema";
 
@@ -11,11 +11,16 @@ export type WorkshopEntity = {
   parentDistrictId: number | null;
 };
 
-/** School years present in the data, newest first. */
+/**
+ * School years that actually carry data, newest first. A year is only included
+ * if it has at least one fact with a value — years present only as empty /
+ * placeholder rows (e.g. a not-yet-published 2025-2026) are skipped.
+ */
 export async function getYears(): Promise<string[]> {
   const rows = await db
     .selectDistinct({ y: facts.schoolYear })
     .from(facts)
+    .where(or(isNotNull(facts.valueNumeric), isNotNull(facts.valueText)))
     .orderBy(desc(facts.schoolYear));
   return rows.map((r) => r.y);
 }
