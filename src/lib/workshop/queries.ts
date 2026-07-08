@@ -1,7 +1,23 @@
 import "server-only";
-import { asc, desc, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, exists, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { entities, facts } from "@/db/schema";
+import { entities, facts, metrics } from "@/db/schema";
+
+/** Codes of metrics that have at least one non-"All Students" subgroup anywhere. */
+export async function getDemographicMetricCodes(): Promise<string[]> {
+  const rows = await db
+    .select({ code: metrics.code })
+    .from(metrics)
+    .where(
+      exists(
+        db
+          .select({ x: sql`1` })
+          .from(facts)
+          .where(and(eq(facts.metricId, metrics.id), ne(facts.subgroup, "All Students"))),
+      ),
+    );
+  return rows.map((r) => r.code);
+}
 
 export type WorkshopEntity = {
   id: number;

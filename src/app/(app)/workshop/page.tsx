@@ -5,7 +5,12 @@ import { requireUser } from "@/lib/auth/guards";
 import { getUserGroups } from "@/lib/groups/queries";
 import { getView } from "@/lib/views/queries";
 import { searchMetrics } from "@/lib/workshop/actions";
-import { getCounties, getEntities, getYears } from "@/lib/workshop/queries";
+import {
+  getCounties,
+  getDemographicMetricCodes,
+  getEntities,
+  getYears,
+} from "@/lib/workshop/queries";
 import { Workshop } from "./workshop";
 
 export default async function WorkshopPage({
@@ -18,19 +23,21 @@ export default async function WorkshopPage({
   const viewId = view ? Number(view) : NaN;
 
   const years = await getYears();
-  const [counties, entities, initialMetrics, groups, saved, me] = await Promise.all([
-    getCounties(),
-    getEntities(),
-    searchMetrics("", years[0]),
-    getUserGroups(),
-    Number.isInteger(viewId) ? getView(viewId) : Promise.resolve(null),
-    db
-      .select({ homeDistrictId: users.homeDistrictId })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1)
-      .then((r) => r[0]),
-  ]);
+  const [counties, entities, initialMetrics, groups, demographicMetrics, saved, me] =
+    await Promise.all([
+      getCounties(),
+      getEntities(),
+      searchMetrics("", years[0]),
+      getUserGroups(),
+      getDemographicMetricCodes(),
+      Number.isInteger(viewId) ? getView(viewId) : Promise.resolve(null),
+      db
+        .select({ homeDistrictId: users.homeDistrictId })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1)
+        .then((r) => r[0]),
+    ]);
 
   return (
     <Workshop
@@ -39,6 +46,7 @@ export default async function WorkshopPage({
       entities={entities}
       initialMetrics={initialMetrics}
       initialGroups={groups}
+      demographicMetrics={demographicMetrics}
       initialView={saved?.state ?? null}
       initialViewName={saved?.name ?? null}
       homeDistrictId={me?.homeDistrictId ?? null}

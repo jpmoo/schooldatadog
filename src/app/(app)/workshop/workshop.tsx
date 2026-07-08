@@ -170,6 +170,7 @@ export function Workshop({
   entities,
   initialMetrics,
   initialGroups,
+  demographicMetrics,
   initialView,
   initialViewName,
   homeDistrictId,
@@ -179,10 +180,12 @@ export function Workshop({
   entities: WorkshopEntity[];
   initialMetrics: MetricLite[];
   initialGroups: GroupLite[];
+  demographicMetrics: string[];
   initialView: SavedViewState | null;
   initialViewName: string | null;
   homeDistrictId: number | null;
 }) {
+  const demographicSet = useMemo(() => new Set(demographicMetrics), [demographicMetrics]);
   const [year, setYear] = useState(years[0] ?? "");
   const [query, setQuery] = useState("");
   const [metrics, setMetrics] = useState<MetricLite[]>(initialMetrics);
@@ -1124,6 +1127,10 @@ export function Workshop({
           <SortMenu
             ctx={ctx}
             view={viewMode}
+            canSubgroup={(() => {
+              const col = columnsById[ctx.key];
+              return col?.kind === "data" && demographicSet.has(col.metric.code);
+            })()}
             applySort={applySort}
             clearSorts={clearSorts}
             onEdit={(id) => {
@@ -1468,6 +1475,7 @@ function NameDialog({
 function SortMenu({
   ctx,
   view,
+  canSubgroup,
   applySort,
   clearSorts,
   onEdit,
@@ -1477,6 +1485,7 @@ function SortMenu({
 }: {
   ctx: Ctx;
   view: ViewMode;
+  canSubgroup: boolean;
   applySort: (level: "district" | "school", key: string, dir: "asc" | "desc", add: boolean) => void;
   clearSorts: () => void;
   onEdit: (id: string) => void;
@@ -1510,7 +1519,7 @@ function SortMenu({
           <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
         </>
       )}
-      {ctx.kind === "data" && (
+      {ctx.kind === "data" && canSubgroup && (
         <>
           <Item onClick={onSubgroup}>Choose demographic…</Item>
           <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
