@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "School Data Dog",
+  title: "Data Dog",
   description: "Explore and compare New York State school & district data.",
 };
 

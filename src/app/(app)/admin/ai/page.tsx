@@ -20,7 +20,7 @@ export default async function AiSettingsPage() {
           AI / Ollama
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
-          Point School Data Dog at your Ollama server and choose the model used
+          Point Data Dog at your Ollama server and choose the model used
           for AI-assisted analysis.
         </p>
       </div>

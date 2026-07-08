@@ -45,26 +45,6 @@ function evenSplit(total: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
 }
 
-/**
- * Distribute `total` across `n` parts in proportion to `weights`, rounded to
- * whole numbers that sum to exactly `total` (largest-remainder rounding). Falls
- * back to an even split when the weights carry no signal.
- */
-function proportionalSplit(total: number, weights: number[]): number[] {
-  const n = weights.length;
-  if (n === 0) return [];
-  const sum = weights.reduce((a, b) => a + b, 0);
-  if (sum <= 0) return evenSplit(total, n);
-  const raw = weights.map((w) => (total * w) / sum);
-  const out = raw.map(Math.floor);
-  let rem = total - out.reduce((a, b) => a + b, 0);
-  const byFrac = raw
-    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (let k = 0; k < rem; k++) out[byFrac[k % n].i]++;
-  return out;
-}
-
 function SortableSource({
   s,
   showWeight,
@@ -167,41 +147,40 @@ export function CalcDialog({
   const isSimilarity = calcType === "similarity";
   const showWeight = calcType === "rank" || isSimilarity;
 
-  // Keep weights as whole-number percentages that always total 100. Re-equalize
-  // whenever the set of selected columns changes (or we switch to a weighted
-  // type); leave them alone once valid so manual edits stick.
+  // Seed an even split the first time a field is weighted, and give any brand-new
+  // column a default share — but never touch weights the user has already set
+  // (they balance to 100 themselves, watching the running total).
   const idsKey = selectedInOrder.map((s) => s.id).join(",");
   useEffect(() => {
     if (!showWeight) return;
     const ids = selectedInOrder.map((s) => s.id);
+    if (ids.length === 0) return;
     setWeights((prev) => {
-      const covered = ids.every((id) => typeof prev[id] === "number");
-      const sum = ids.reduce((a, id) => a + (prev[id] ?? 0), 0);
-      if (ids.length > 0 && covered && sum === 100) return prev;
-      const split = evenSplit(100, ids.length);
-      const next: Record<string, number> = {};
-      ids.forEach((id, i) => (next[id] = split[i]));
-      return next;
+      const anyExisting = ids.some((id) => typeof prev[id] === "number");
+      if (!anyExisting) {
+        const split = evenSplit(100, ids.length);
+        const next: Record<string, number> = {};
+        ids.forEach((id, i) => (next[id] = split[i]));
+        return next;
+      }
+      const share = Math.round(100 / ids.length);
+      let changed = false;
+      const next = { ...prev };
+      for (const id of ids) {
+        if (typeof next[id] !== "number") {
+          next[id] = share;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showWeight, idsKey]);
 
-  // Set one column's weight and rebalance the rest so the total stays 100%.
+  // Set one column's weight only — the others are left exactly as the user set
+  // them (the x/100 total shows whether they still add up).
   function setWeight(id: string, value: number) {
-    const ids = selectedInOrder.map((s) => s.id);
-    const others = ids.filter((x) => x !== id);
-    if (others.length === 0) {
-      setWeights({ [id]: 100 });
-      return;
-    }
-    const v = clampPct(value);
-    const dist = proportionalSplit(
-      100 - v,
-      others.map((x) => weights[x] ?? 0),
-    );
-    const next: Record<string, number> = { ...weights, [id]: v };
-    others.forEach((x, i) => (next[x] = dist[i]));
-    setWeights(next);
+    setWeights((w) => ({ ...w, [id]: clampPct(value) }));
   }
 
   function distributeEvenly() {
@@ -340,8 +319,7 @@ export function CalcDialog({
               {showWeight && selectedInOrder.length > 0 && (
                 <div className="mt-1 flex items-start justify-between gap-2">
                   <p className="text-xs text-slate-400">
-                    Weights are whole-percent shares — editing one rebalances the others to keep the
-                    total at 100%.
+                    Set each column&apos;s share — adjust them so the total adds up to 100.
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
                     <span

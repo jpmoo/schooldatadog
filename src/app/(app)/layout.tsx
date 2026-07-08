@@ -21,10 +21,10 @@ export default async function AppLayout({
             >
               <span
                 role="img"
-                aria-label="School Data Dog logo"
+                aria-label="Data Dog logo"
                 className="brand-logo h-8"
               />
-              <span className="font-bold tracking-tight">School Data Dog</span>
+              <span className="font-bold tracking-tight">Data Dog</span>
             </Link>
           </nav>
 

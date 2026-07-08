@@ -14,11 +14,11 @@ export default function AuthLayout({
         >
           <span
             role="img"
-            aria-label="School Data Dog logo"
+            aria-label="Data Dog logo"
             className="brand-logo h-28"
           />
           <span className="text-2xl font-bold tracking-tight">
-            School Data Dog
+            Data Dog
           </span>
         </Link>
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
