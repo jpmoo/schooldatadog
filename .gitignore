@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# database backups written by the admin backup tool
+/backup
+
 # production
 /build
 

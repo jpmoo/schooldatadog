@@ -30,6 +30,11 @@ const tools: Tool[] = [
     body: "Review sign-ins, sign-outs, and saves/loads of views, groups, and visualizations.",
     href: "/admin/log",
   },
+  {
+    title: "Database Backups",
+    body: "Schedule automatic database backups, set how many to keep, or back up on demand.",
+    href: "/admin/backup",
+  },
 ];
 
 export default async function AdminPage() {

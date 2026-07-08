@@ -16,6 +16,9 @@ export const ACTION_LABELS: Record<string, string> = {
   "chart.load": "Opened a visualization",
   "impersonate.start": "Logged in as a user",
   "impersonate.stop": "Returned to admin",
+  "backup.create": "Created a database backup",
+  "backup.error": "Database backup failed",
+  "backup.schedule": "Changed the backup schedule",
 };
 
 /**
