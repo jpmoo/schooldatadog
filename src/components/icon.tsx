@@ -9,6 +9,7 @@ export type IconName =
   | "myDistrictSchools"
   | "saveViewOrGroup"
   | "savedItems"
+  | "Settings"
   | "showHideEmpty"
   | "showHidePanel"
   | "visualizer";

@@ -30,6 +30,7 @@ const tiles: Tile[] = [
     title: "System Settings",
     body: "Admin tools for AI/Ollama, the data dictionary, entities, and user accounts.",
     href: "/admin",
+    icon: "Settings",
     adminOnly: true,
   },
 ];

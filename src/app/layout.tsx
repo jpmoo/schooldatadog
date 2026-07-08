@@ -28,8 +28,8 @@ export default function RootLayout({
   // One CSS var per icon (mask URL); the <Icon> component references var(--i-<name>).
   const iconNames = [
     "calcualtedField", "clear", "dashboard", "dataWorkshop", "logout",
-    "myDistrictSchools", "saveViewOrGroup", "savedItems", "showHideEmpty",
-    "showHidePanel", "visualizer",
+    "myDistrictSchools", "saveViewOrGroup", "savedItems", "Settings",
+    "showHideEmpty", "showHidePanel", "visualizer",
   ];
   const cssVars = {
     "--brand-logo-src": `url("${basePath}/SchoolDataDog.svg")`,

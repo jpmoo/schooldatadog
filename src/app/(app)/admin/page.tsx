@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 import { requireAdmin } from "@/lib/auth/guards";
 
 type Tool = { title: string; body: string; href: string };
@@ -39,7 +40,8 @@ export default async function AdminPage() {
         >
           ← Dashboard
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+        <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
+          <Icon name="Settings" className="h-7 w-7 text-indigo-500" />
           System Settings
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
