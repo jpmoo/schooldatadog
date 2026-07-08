@@ -11,6 +11,7 @@ import type { WorkshopEntity } from "@/lib/workshop/queries";
 import type { MetricLite } from "@/lib/workshop/types";
 import { createChart, updateChart } from "@/lib/charts/actions";
 import { getViewForImport } from "@/lib/viz/actions";
+import { visualizerChat, type ChatMessage } from "@/lib/viz/chat";
 import { columnsOf, resolveDataset, type Row } from "@/lib/viz/resolve";
 import { blankSpec, type CalcFieldSpec, type ChartSpec, type EntitySource, type FieldSpec } from "@/lib/viz/spec";
 import { VegaChart } from "@/lib/viz/vega-chart";
@@ -84,7 +85,7 @@ export function Visualizer({
 
   // entity source / panel
   const [entScope, setEntScope] = useState<"district" | "school" | "mixed">("district");
-  const [lastBase, setLastBase] = useState<"districts" | "schools" | null>("districts");
+  const [entType, setEntType] = useState<"districts" | "schools" | "both">("districts");
   const [county, setCounty] = useState("");
   const [entOpen, setEntOpen] = useState(false);
   const [entSearch, setEntSearch] = useState("");
@@ -96,20 +97,22 @@ export function Visualizer({
       data: { ...s.data, entities: { ids, level: level ?? s.data.entities.level, source } },
     }));
   }
-  function applyBase(base: "districts" | "schools", c = county) {
+  function applyBase(base: "districts" | "schools" | "both", c = county) {
     const type = base === "districts" ? "district" : "school";
-    setLastBase(base);
-    setEntScope(type);
+    setEntType(base);
+    setEntScope(base === "both" ? "mixed" : type);
     setEntities(
-      entities.filter((e) => e.type === type && (!c || e.county === c)).map((e) => e.id),
+      entities
+        .filter((e) => (base === "both" || e.type === type) && (!c || e.county === c))
+        .map((e) => e.id),
       undefined,
-      type,
+      base === "both" ? "both" : type,
     );
   }
   function applyGroup(gid: string) {
     const g = groups.find((x) => String(x.id) === gid);
     if (!g) return;
-    setLastBase(null);
+    setEntType("both");
     setEntScope("mixed");
     setEntities(g.entityIds, { kind: "group", id: g.id, name: g.name }, "both");
   }
@@ -183,7 +186,7 @@ export function Visualizer({
     }
     fields.push(...merged.values());
 
-    setLastBase(null);
+    setEntType(st.viewMode === "schools" ? "schools" : st.viewMode === "districts" ? "districts" : "both");
     setEntScope(st.viewMode === "schools" ? "school" : st.viewMode === "districts" ? "district" : "mixed");
     // Default encoding so a chart draws on import (old encoding referenced the
     // previous fields). Multi-year → a line over years, one line per entity.
@@ -209,6 +212,104 @@ export function Visualizer({
       },
     }));
   }
+
+  // ── AI assistant ──
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInput, setAiInput] = useState("");
+  const [aiMsgs, setAiMsgs] = useState<(ChatMessage & { error?: boolean })[]>([]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const aiScroll = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
+  }, [aiMsgs, aiBusy]);
+
+  // Full metric catalog (for the AI prompt + resolving codes the AI returns).
+  const metricByCode = useMemo(
+    () => new Map(initialMetrics.map((m) => [m.code, m])),
+    [initialMetrics],
+  );
+
+  // Apply a chart command from the AI onto the current spec.
+  function applyAiChart(chart: unknown) {
+    if (!chart || typeof chart !== "object") return;
+    const c = chart as Record<string, unknown>;
+
+    // entities
+    const ent = c.entities;
+    if (ent && ent !== "keep") {
+      if (ent === "districts" || ent === "schools" || ent === "both") applyBase(ent);
+      else if (typeof ent === "object" && "group" in ent) {
+        const name = String((ent as { group: unknown }).group).toLowerCase();
+        const g = groups.find((x) => x.name.toLowerCase() === name);
+        if (g) applyGroup(String(g.id));
+      }
+    }
+
+    // fields — keep only ones whose metric code we recognise
+    const rawFields = Array.isArray(c.fields) ? (c.fields as Record<string, unknown>[]) : null;
+    if (rawFields) {
+      const fields: FieldSpec[] = rawFields
+        .map((f) => {
+          const code = String(f.metric ?? "");
+          const m = metricByCode.get(code);
+          if (!m) return null;
+          const yrs = Array.isArray(f.years) && f.years.length ? (f.years as string[]) : [year];
+          return {
+            id: String(f.id ?? newId("f")),
+            metric: code,
+            metricName: m.name,
+            years: yrs.filter((y) => years.includes(y)),
+            subgroup: typeof f.subgroup === "string" ? f.subgroup : "All Students",
+            label: typeof f.label === "string" && f.label ? f.label : m.name,
+            dataType: m.dataType,
+            unit: m.unit,
+          } as FieldSpec;
+        })
+        .filter((f): f is FieldSpec => f !== null && f.years.length > 0);
+      setSpec((s) => ({
+        ...s,
+        mark: typeof c.mark === "string" ? c.mark : s.mark,
+        encoding: (c.encoding as ChartSpec["encoding"]) ?? s.encoding,
+        title: typeof c.title === "string" ? c.title : s.title,
+        data: { ...s.data, fields, calc: [] },
+      }));
+    } else if (c.encoding || c.mark || typeof c.title === "string") {
+      setSpec((s) => ({
+        ...s,
+        mark: typeof c.mark === "string" ? c.mark : s.mark,
+        encoding: (c.encoding as ChartSpec["encoding"]) ?? s.encoding,
+        title: typeof c.title === "string" ? c.title : s.title,
+      }));
+    }
+  }
+
+  async function sendAi() {
+    const text = aiInput.trim();
+    if (!text || aiBusy) return;
+    const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
+    setAiMsgs((m) => [...m, { role: "user", content: text }]);
+    setAiInput("");
+    setAiBusy(true);
+    const res = await visualizerChat(history, spec, {
+      metrics: initialMetrics.map((m) => ({ code: m.code, name: m.name, category: m.category ?? null })),
+      years,
+      subgroups: STD_SUBGROUPS,
+      groups: groups.map((g) => g.name),
+    });
+    setAiBusy(false);
+    if (res.ok) {
+      setAiMsgs((m) => [...m, { role: "assistant", content: res.reply || "(done)" }]);
+      if (res.chart) applyAiChart(res.chart);
+    } else {
+      setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
+    }
+  }
+
+  // A fresh chart starts on "Districts only" — populate that set once on mount.
+  useEffect(() => {
+    if (!initialChart) applyBase("districts");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // resolve on data change
   const dataKey = JSON.stringify(spec.data);
@@ -347,29 +448,28 @@ export function Visualizer({
 
       <div className="flex min-h-0 flex-1 gap-2">
         {/* LEFT — data */}
-        <aside className="flex w-[27%] min-w-[280px] flex-col gap-3 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <aside className="flex w-[27%] min-w-[280px] flex-col gap-3 overflow-y-auto [scrollbar-gutter:stable] rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Entities ({spec.data.entities.ids.length})
           </p>
-          <div className="flex gap-2">
-            <button onClick={() => applyBase("districts")} className={`${input} flex-1 ${lastBase === "districts" ? "border-indigo-500" : ""}`}>All districts</button>
-            <button onClick={() => applyBase("schools")} className={`${input} flex-1 ${lastBase === "schools" ? "border-indigo-500" : ""}`}>All schools</button>
-          </div>
-          {lastBase && (
-            <select value={county} onChange={(e) => { setCounty(e.target.value); applyBase(lastBase, e.target.value); }} className={input}>
-              <option value="">All counties</option>
-              {counties.map((c) => (<option key={c} value={c}>{c}</option>))}
-            </select>
-          )}
+          <select value={entType} onChange={(e) => applyBase(e.target.value as "districts" | "schools" | "both")} className={input}>
+            <option value="districts">Districts only</option>
+            <option value="schools">Schools only</option>
+            <option value="both">Districts &amp; schools</option>
+          </select>
+          <select value={county} onChange={(e) => { setCounty(e.target.value); applyBase(entType, e.target.value); }} className={input}>
+            <option value="">All counties</option>
+            {counties.map((c) => (<option key={c} value={c}>{c}</option>))}
+          </select>
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500 dark:text-slate-400">Group</span>
+            <span className="text-slate-500 dark:text-slate-400">Saved Group</span>
             <select value="" onChange={(e) => e.target.value && applyGroup(e.target.value)} className={`${input} flex-1`}>
               <option value="">{groups.length ? "Choose a group…" : "No saved groups"}</option>
               {groups.map((g) => (<option key={g.id} value={g.id}>{g.name} ({g.entityIds.length})</option>))}
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500 dark:text-slate-400">View</span>
+            <span className="text-slate-500 dark:text-slate-400">Saved View</span>
             <select
               value=""
               onChange={(e) => {
@@ -384,7 +484,8 @@ export function Visualizer({
           </label>
           {provenance && <p className="text-[11px] text-indigo-500">from {provenance.kind}: {provenance.name}</p>}
 
-          <button onClick={() => setEntOpen((v) => !v)} className={input}>
+          <button onClick={() => setEntOpen((v) => !v)} className={`${input} flex items-center justify-center gap-2`}>
+            <Icon name="myDistrictSchools" className="h-4 w-4" />
             {entOpen ? "Hide entity list" : "Choose entities…"}
           </button>
           {entOpen && (
@@ -550,6 +651,62 @@ export function Visualizer({
             <input value={spec.title ?? ""} onChange={(e) => setSpec((s) => ({ ...s, title: e.target.value || undefined }))} className={input} />
           </label>
         </aside>
+      </div>
+
+      {/* BOTTOM — AI assistant */}
+      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <button
+          onClick={() => setAiOpen((v) => !v)}
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm font-medium text-slate-700 dark:text-slate-200"
+        >
+          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">AI</span>
+          <span className="flex-1">Ask the AI to build or explain this chart</span>
+          <span className="text-slate-400">{aiOpen ? "▾" : "▸"}</span>
+        </button>
+        {aiOpen && (
+          <div className="flex h-56 flex-col border-t border-slate-200 dark:border-slate-800">
+            <div ref={aiScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {aiMsgs.length === 0 && (
+                <p className="text-sm text-slate-400">
+                  Try “compare 4-year graduation rates for these districts” or “which of these
+                  metrics would show equity gaps best?” — I’ll build the chart and answer questions.
+                </p>
+              )}
+              {aiMsgs.map((m, i) => (
+                <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                  <div
+                    className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-sm ${
+                      m.role === "user"
+                        ? "bg-indigo-600 text-white"
+                        : m.error
+                          ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
+            </div>
+            <div className="flex gap-2 border-t border-slate-200 p-2 dark:border-slate-800">
+              <input
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendAi(); } }}
+                placeholder="Tell the AI what to chart, or ask about the data…"
+                className={`${input} flex-1`}
+              />
+              <button
+                onClick={() => void sendAi()}
+                disabled={aiBusy || !aiInput.trim()}
+                className="rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
