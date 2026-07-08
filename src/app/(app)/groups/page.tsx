@@ -12,13 +12,7 @@ export default async function GroupsPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link
-          href="/"
-          className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-        >
-          ← Dashboard
-        </Link>
-        <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
+        <h1 className="flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
           <Icon name="saveViewOrGroup" className="h-7 w-7 text-indigo-500" />
           Saved Groups
         </h1>

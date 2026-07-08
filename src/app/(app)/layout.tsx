@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { AccountMenu } from "@/app/(app)/_components/account-menu";
+import { DashboardLink } from "@/app/(app)/_components/dashboard-link";
 import { requireUser } from "@/lib/auth/guards";
 import { logout } from "@/lib/auth/actions";
 
@@ -39,6 +40,7 @@ export default async function AppLayout({
                 admin
               </span>
             )}
+            <DashboardLink />
             <form action={logout}>
               <button
                 type="submit"
