@@ -102,6 +102,7 @@ function ColumnHeader({
   return (
     <th
       ref={setRef}
+      data-colid={col.id}
       onContextMenu={(e) => onContext(e, col)}
       className={`sticky top-0 z-10 min-w-[140px] cursor-grab border-b border-l border-slate-200 bg-slate-50 px-3 py-2 text-left align-top dark:border-slate-800 dark:bg-slate-900 ${
         drop.isOver ? "bg-indigo-100 dark:bg-indigo-950" : ""
@@ -321,12 +322,22 @@ export function Workshop({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns]);
 
+  // Bring a just-added column into view (jump the sheet's horizontal scroll).
+  function scrollToColumn(id: string) {
+    setTimeout(() => {
+      scrollRef.current
+        ?.querySelector(`[data-colid="${id}"]`)
+        ?.scrollIntoView({ block: "nearest", inline: "end", behavior: "smooth" });
+    }, 60);
+  }
+
   // ── column ops ──
   // Duplicates are allowed — the same metric can legitimately appear more than
   // once (e.g. different demographic slices, or the same slice for comparison).
   async function addDataColumn(metric: MetricLite, yr: string, subgroup = ALL_STUDENTS) {
     const id = `data-${metric.code}-${yr}-${columns.length}-${Math.round(performance.now())}`;
     setColumns((cs) => [...cs, { id, kind: "data", metric, year: yr, subgroup, values: {} }]);
+    scrollToColumn(id);
     setLoading((s) => new Set(s).add(id));
     const vals = await getColumnValues(metric.code, yr, subgroup);
     const map: Record<number, number | null> = {};
@@ -385,6 +396,7 @@ export function Workshop({
     });
 
     if (newCols.length === 0) return;
+    scrollToColumn(newCols[0].id);
     setLoading((s) => {
       const n = new Set(s);
       newCols.forEach((c) => n.add(c.id));
@@ -418,6 +430,7 @@ export function Workshop({
     } else {
       const id = `calc-${columns.length}-${Math.round(performance.now())}`;
       setColumns((cs) => [...cs, { id, kind: "calc", ...config }]);
+      scrollToColumn(id);
     }
     setCalcDialog(null);
   }

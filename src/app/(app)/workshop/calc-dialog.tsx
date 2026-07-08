@@ -204,6 +204,14 @@ export function CalcDialog({
     setWeights(next);
   }
 
+  function distributeEvenly() {
+    const ids = selectedInOrder.map((s) => s.id);
+    const split = evenSplit(100, ids.length);
+    const next: Record<string, number> = {};
+    ids.forEach((id, i) => (next[id] = split[i]));
+    setWeights(next);
+  }
+
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -329,10 +337,20 @@ export function CalcDialog({
               )}
 
               {showWeight && selectedInOrder.length > 0 && (
-                <p className="mt-1 text-xs text-slate-400">
-                  Weights are whole-percent shares — editing one rebalances the others to keep the
-                  total at 100%.
-                </p>
+                <div className="mt-1 flex items-start justify-between gap-2">
+                  <p className="text-xs text-slate-400">
+                    Weights are whole-percent shares — editing one rebalances the others to keep the
+                    total at 100%.
+                  </p>
+                  {selectedInOrder.length > 1 && (
+                    <button
+                      onClick={distributeEvenly}
+                      className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      Distribute evenly
+                    </button>
+                  )}
+                </div>
               )}
 
               {isChange && (
