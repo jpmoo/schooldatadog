@@ -20,6 +20,11 @@ def infer_entity_type(entity_cd: Optional[str], entity_name: Optional[str] = Non
     # Synthetic statewide / regional aggregate codes start with 8+ zeros.
     if cd[:8] == "00000000":
         return "state"
+    # County rollups: a 2-digit county prefix then all zeros (e.g. "580000000000").
+    # These aggregate a whole county and aren't a real district, so drop them like
+    # any other aggregate — county is a filter dimension in the app, not an entity.
+    if len(cd) == 12 and cd[2:] == "0" * 10:
+        return "state"
     if len(cd) == 12 and cd.endswith("0000"):
         return "district"
     return "school"

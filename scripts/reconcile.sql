@@ -2,6 +2,8 @@
 -- and re-loads end up matching the migrations (which run BEFORE the data exists):
 --   * populate entities.county from the NYSED county code (BEDS first 2 digits)
 --   * remove statewide/aggregate ("state") entities (facts cascade)
+--   * remove county rollup entities (BEDS prefix + all zeros) that older
+--     payloads mislabeled as districts (facts cascade)
 
 UPDATE entities e
    SET county = c.name
@@ -27,3 +29,8 @@ UPDATE entities e
    AND e.county IS DISTINCT FROM c.name;
 
 DELETE FROM entities WHERE type = 'state';
+
+-- County rollups misclassified as districts by older payloads: a 2-digit county
+-- prefix followed by all zeros (e.g. "580000000000"). Real districts carry a
+-- non-zero district number, so none are caught here.
+DELETE FROM entities WHERE beds_code ~ '^[0-9]{2}0{10}$';
