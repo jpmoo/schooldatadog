@@ -17,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Icon } from "@/components/icon";
 import { CALC_LABELS, type CalcType } from "./columns";
 
 export type CalcConfig = {
@@ -376,8 +377,9 @@ export function CalcDialog({
                 refEntityId: isSimilarity ? refEntityId : null,
               })
             }
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
+            <Icon name="calcualtedField" className="h-4 w-4" />
             {initial ? "Save" : "Add field"}
           </button>
         </div>

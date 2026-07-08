@@ -1428,14 +1428,16 @@ function OverwriteDialog({
           </button>
           <button
             onClick={onSaveNew}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
+            <Icon name="saveViewOrGroup" className="h-4 w-4" />
             Save as new
           </button>
           <button
             onClick={onOverwrite}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
           >
+            <Icon name="saveViewOrGroup" className="h-4 w-4" />
             Overwrite
           </button>
         </div>
@@ -1475,8 +1477,9 @@ function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+            className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
           >
+            <Icon name="clear" className="h-4 w-4" />
             {confirmLabel}
           </button>
         </div>
@@ -1661,8 +1664,9 @@ function NameDialog({
           <button
             disabled={!name.trim() || saving}
             onClick={submit}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
+            <Icon name="saveViewOrGroup" className="h-4 w-4" />
             {saving ? "Saving…" : submitLabel}
           </button>
         </div>

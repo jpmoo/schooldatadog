@@ -298,7 +298,16 @@ export function Visualizer({
     });
     setAiBusy(false);
     if (res.ok) {
-      setAiMsgs((m) => [...m, { role: "assistant", content: res.reply || "(done)" }]);
+      const reply = (res.reply ?? "").trim();
+      // Never surface raw JSON in the chat — if the model is building a chart and
+      // didn't give a clean prose note, show a friendly status instead.
+      const looksJson = /^[[{]/.test(reply) || reply.includes('"encoding"') || reply.includes('"fields"');
+      const content = res.chart
+        ? !reply || looksJson
+          ? "Building visualization…"
+          : reply
+        : reply || "(done)";
+      setAiMsgs((m) => [...m, { role: "assistant", content }]);
       if (res.chart) applyAiChart(res.chart);
     } else {
       setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);

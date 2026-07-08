@@ -40,8 +40,9 @@ export default async function ViewsPage() {
             >
               <Link
                 href={`/workshop?view=${v.id}`}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
               >
+                <Icon name="open" className="h-4 w-4" />
                 Open
               </Link>
               <form action={renameView} className="flex min-w-0 flex-1 items-center gap-2">
@@ -55,8 +56,9 @@ export default async function ViewsPage() {
                 />
                 <button
                   type="submit"
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
+                  <Icon name="rename" className="h-4 w-4" />
                   Rename
                 </button>
               </form>

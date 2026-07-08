@@ -16,6 +16,26 @@ export type ChatResult =
   | { ok: true; reply: string; chart: unknown | null }
   | { ok: false; error: string };
 
+/** Pull a JSON object out of a model reply, tolerating code fences / stray prose. */
+function extractJson(text: string): { reply?: unknown; chart?: unknown } | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const s = candidate.indexOf("{");
+    const e = candidate.lastIndexOf("}");
+    if (s >= 0 && e > s) {
+      try {
+        return JSON.parse(candidate.slice(s, e + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 function systemPrompt(catalog: VizCatalog, currentSpec: unknown): string {
   const byCat = new Map<string, string[]>();
   for (const m of catalog.metrics) {
@@ -102,12 +122,16 @@ export async function visualizerChat(
     if (!res.ok) return { ok: false, error: `The AI server returned HTTP ${res.status}.` };
     const data = (await res.json()) as { message?: { content?: string } };
     const content = data?.message?.content ?? "";
-    try {
-      const parsed = JSON.parse(content) as { reply?: string; chart?: unknown };
-      return { ok: true, reply: String(parsed.reply ?? ""), chart: parsed.chart ?? null };
-    } catch {
-      return { ok: true, reply: content || "(no response)", chart: null };
+    const parsed = extractJson(content);
+    if (parsed) {
+      return {
+        ok: true,
+        reply: typeof parsed.reply === "string" ? parsed.reply : "",
+        chart: parsed.chart ?? null,
+      };
     }
+    // No JSON at all — treat the whole thing as a prose answer.
+    return { ok: true, reply: content || "(no response)", chart: null };
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";
     return { ok: false, error: aborted ? "The AI took too long to respond." : "Couldn't reach the AI server." };
