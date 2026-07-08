@@ -13,6 +13,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Icon } from "@/components/icon";
+import { IconMenu } from "@/components/icon-menu";
 import { createGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import { createView } from "@/lib/views/actions";
@@ -35,6 +36,52 @@ import {
 
 const natCompare = (a: string, b: string) =>
   a.localeCompare(b, undefined, { numeric: true });
+
+// ── data export (CSV / Excel / print-to-PDF) ──────────────────────────────
+function colLabel(col: Column): string {
+  if (col.kind === "data") {
+    const sg = col.subgroup !== ALL_STUDENTS ? ` · ${col.subgroup}` : "";
+    return `${col.metric.name} (${col.year})${sg}`;
+  }
+  return `ƒ ${col.name}`;
+}
+const escHtml = (v: string | number) =>
+  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function tableHtml(header: (string | number)[], data: (string | number)[][]) {
+  const th = `<tr>${header.map((h) => `<th>${escHtml(h)}</th>`).join("")}</tr>`;
+  const tb = data.map((r) => `<tr>${r.map((c) => `<td>${escHtml(c)}</td>`).join("")}</tr>`).join("");
+  return `<table>${th}${tb}</table>`;
+}
+function exportCsv(header: (string | number)[], data: (string | number)[][]) {
+  const esc = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [header, ...data].map((r) => r.map(esc).join(",")).join("\n");
+  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "data-workshop.csv");
+}
+function exportExcel(header: (string | number)[], data: (string | number)[][]) {
+  const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>${tableHtml(header, data)}</body></html>`;
+  downloadBlob(new Blob([html], { type: "application/vnd.ms-excel" }), "data-workshop.xls");
+}
+function exportPdf(header: (string | number)[], data: (string | number)[][]) {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(
+    `<html><head><title>Data Workshop</title><style>body{font-family:sans-serif;margin:16px}table{border-collapse:collapse;font-size:10px}th,td{border:1px solid #cbd5e1;padding:2px 6px;text-align:left}th{background:#f1f5f9}</style></head><body>${tableHtml(header, data)}</body></html>`,
+  );
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
+}
 
 // ── drag sources / drop targets ───────────────────────────────────────────
 
@@ -685,6 +732,21 @@ export function Workshop({
     setViewName(null);
     setConfirmClear(false);
   }
+  // Export the currently-displayed sheet (rank + name + every column).
+  function exportSheet(format: "csv" | "excel" | "pdf") {
+    const header: (string | number)[] = ["Rank", "School / District", ...columns.map(colLabel)];
+    const data = rows.map(({ entity: e, rank }) => [
+      rank,
+      e.name,
+      ...columns.map((col) => {
+        const v = getVal(col, e.id);
+        return v == null ? "" : v;
+      }),
+    ]);
+    if (format === "csv") exportCsv(header, data);
+    else if (format === "excel") exportExcel(header, data);
+    else exportPdf(header, data);
+  }
   async function handleSaveView(name: string) {
     const res = await createView(name, captureState());
     if (res.ok) {
@@ -948,6 +1010,17 @@ export function Workshop({
             >
               <Icon name="clear" />
             </button>
+            <IconMenu
+              icon="export"
+              title="Export data (PDF / Excel / CSV)"
+              buttonClassName={iconBtn}
+              disabled={columns.length === 0}
+              items={[
+                { label: "PDF", onClick: () => exportSheet("pdf") },
+                { label: "Excel", onClick: () => exportSheet("excel") },
+                { label: "CSV", onClick: () => exportSheet("csv") },
+              ]}
+            />
             <span className="ml-auto text-xs text-slate-400">
               {viewName ? <span className="mr-2 text-indigo-500">“{viewName}”</span> : null}
               {rows.length.toLocaleString()} rows · {columns.length} column{columns.length === 1 ? "" : "s"}

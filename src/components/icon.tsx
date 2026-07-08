@@ -5,11 +5,13 @@ export type IconName =
   | "clear"
   | "dashboard"
   | "dataWorkshop"
+  | "export"
   | "logout"
   | "myDistrictSchools"
   | "saveViewOrGroup"
   | "savedItems"
   | "Settings"
+  | "spec"
   | "showHideEmpty"
   | "showHidePanel"
   | "visualizer";

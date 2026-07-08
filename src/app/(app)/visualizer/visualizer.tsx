@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { View } from "vega";
+import { Icon } from "@/components/icon";
+import { IconMenu } from "@/components/icon-menu";
 import type { GroupLite } from "@/lib/groups/queries";
 import type { SavedViewMeta } from "@/lib/views/queries";
 import { searchMetrics } from "@/lib/workshop/actions";
@@ -287,18 +289,36 @@ export function Visualizer({
   const canRender = rows.length > 0 && Object.keys(spec.encoding ?? {}).length > 0;
   const provenance = spec.data.entities.source;
   const input = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+  const iconBtn =
+    "flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800";
+  const iconBtnActive =
+    "flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-500 bg-indigo-600 text-white";
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-2">
       {/* top bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Chart name" className={`${input} min-w-[220px] flex-1`} />
-        <button onClick={save} className="h-9 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white hover:bg-indigo-500">
-          {chartId ? "Save" : "Save chart"}
+        <button onClick={save} className={iconBtn} title="Save chart">
+          <Icon name="saveViewOrGroup" />
         </button>
-        <button onClick={() => exportImage("svg")} disabled={!canRender} className={`${input} disabled:opacity-40`}>Export SVG</button>
-        <button onClick={() => exportImage("png")} disabled={!canRender} className={`${input} disabled:opacity-40`}>Export PNG</button>
-        <button onClick={() => setShowJson((v) => !v)} className={input}>{showJson ? "Hide spec" : "</> Spec"}</button>
+        <IconMenu
+          icon="export"
+          title="Export chart (SVG / PNG)"
+          buttonClassName={iconBtn}
+          disabled={!canRender}
+          items={[
+            { label: "SVG", onClick: () => exportImage("svg") },
+            { label: "PNG", onClick: () => exportImage("png") },
+          ]}
+        />
+        <button
+          onClick={() => setShowJson((v) => !v)}
+          className={showJson ? iconBtnActive : iconBtn}
+          title={showJson ? "Hide spec" : "Edit spec (JSON)"}
+        >
+          <Icon name="spec" />
+        </button>
         {saveMsg && <span className="text-sm text-slate-500 dark:text-slate-400">{saveMsg}</span>}
       </div>
 
