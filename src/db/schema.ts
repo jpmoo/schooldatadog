@@ -196,6 +196,36 @@ export const facts = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
+ * Saved groups: user-curated sets of entities
+ * ------------------------------------------------------------------ */
+
+/**
+ * A user-defined collection of schools/districts, used as a one-click filter
+ * in the Data Workshop ("show only this group"). Membership is stored as a
+ * JSON array of entity ids rather than a join table: the sets are small,
+ * strictly user-scoped, and always read/written whole. Ids that later point at
+ * a deleted entity are simply filtered out on read.
+ */
+export const entityGroups = pgTable(
+  "entity_groups",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    entityIds: jsonb("entity_ids").$type<number[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("entity_groups_user_idx").on(t.userId)],
+);
+
+/* ------------------------------------------------------------------ *
  * App settings (key/value)
  * ------------------------------------------------------------------ */
 
@@ -266,6 +296,8 @@ export type NewEntity = typeof entities.$inferInsert;
 export type Fact = typeof facts.$inferSelect;
 export type NewFact = typeof facts.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
+export type EntityGroup = typeof entityGroups.$inferSelect;
+export type NewEntityGroup = typeof entityGroups.$inferInsert;
 
 export type UserRole = (typeof userRole.enumValues)[number];
 export type EntityType = (typeof entityType.enumValues)[number];

@@ -1,7 +1,21 @@
+import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { entities, facts, metrics } from "@/db/schema";
 import { getCurrentSession } from "@/lib/auth/session";
+
+const tiles = [
+  {
+    title: "Data Workshop",
+    body: "Build comparative spreadsheets — drag in metrics, add calculated fields, and filter.",
+    href: "/workshop",
+  },
+  {
+    title: "Saved Groups",
+    body: "Preview, rename, and delete the school & district groups you use as workshop filters.",
+    href: "/groups",
+  },
+];
 
 async function countRows(table: typeof metrics | typeof entities | typeof facts) {
   const [{ count }] = await db
@@ -50,6 +64,19 @@ export default async function DashboardPage() {
               {s.label}
             </div>
           </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {tiles.map((t) => (
+          <Link
+            key={t.title}
+            href={t.href}
+            className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
+          >
+            <h2 className="font-semibold text-slate-900 dark:text-white">{t.title}</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t.body}</p>
+          </Link>
         ))}
       </div>
 

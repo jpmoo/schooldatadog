@@ -50,6 +50,13 @@
       "when": 1783466477443,
       "tag": "0006_delete_state_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783469228150,
+      "tag": "0007_breezy_ares",
+      "breakpoints": true
     }
   ]
 }
