@@ -224,6 +224,7 @@ export function CalcDialog({
 
   const isChange = calcType === "change" || calcType === "avgchange";
   const enoughCols = selectedInOrder.length >= (isChange ? 2 : 1);
+  const weightSum = selectedInOrder.reduce((a, s) => a + (weights[s.id] ?? 0), 0);
   const canSubmit =
     enoughCols && name.trim().length > 0 && (!isSimilarity || refEntityId != null);
 
@@ -342,14 +343,24 @@ export function CalcDialog({
                     Weights are whole-percent shares — editing one rebalances the others to keep the
                     total at 100%.
                   </p>
-                  {selectedInOrder.length > 1 && (
-                    <button
-                      onClick={distributeEvenly}
-                      className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={`text-xs font-medium tabular-nums ${
+                        weightSum === 100 ? "text-slate-500 dark:text-slate-400" : "text-red-500"
+                      }`}
+                      title="Sum of weights"
                     >
-                      Distribute evenly
-                    </button>
-                  )}
+                      {weightSum}/100
+                    </span>
+                    {selectedInOrder.length > 1 && (
+                      <button
+                        onClick={distributeEvenly}
+                        className="rounded border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        Distribute evenly
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

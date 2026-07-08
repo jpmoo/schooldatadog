@@ -928,14 +928,14 @@ export function Workshop({
                       />
                     </th>
                     {/* rank — narrow, no title */}
-                    <th className="sticky left-[40px] top-0 z-30 w-[48px] border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800" />
+                    <th className="sticky left-[39px] top-0 z-30 w-[48px] border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800" />
                     {/* school / district name */}
                     <th
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setCtx({ key: "name", kind: "name", x: e.clientX, y: e.clientY });
                       }}
-                      className="sticky left-[88px] top-0 z-30 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
+                      className="sticky left-[86px] top-0 z-30 min-w-[240px] cursor-context-menu border-b border-slate-200 bg-slate-100 px-3 py-2 text-left dark:border-slate-800 dark:bg-slate-800"
                     >
                       School / District{" "}
                       <span className="font-normal text-indigo-500">{sortLabel("name")}</span>
@@ -976,11 +976,11 @@ export function Workshop({
                             onChange={() => toggleSelected(e.id)}
                           />
                         </td>
-                        <td className={`sticky left-[40px] z-20 w-[48px] border-b border-slate-100 px-1 py-1.5 text-center text-xs tabular-nums text-slate-400 dark:border-slate-800 ${stickyBg}`}>
+                        <td className={`sticky left-[39px] z-20 w-[48px] border-b border-slate-100 px-1 py-1.5 text-center text-xs tabular-nums text-slate-400 dark:border-slate-800 ${stickyBg}`}>
                           {i + 1}
                         </td>
                         <td
-                          className={`sticky left-[88px] z-20 min-w-[240px] border-b border-slate-100 px-3 py-1.5 dark:border-slate-800 ${stickyBg} ${
+                          className={`sticky left-[86px] z-20 min-w-[240px] border-b border-slate-100 px-3 py-1.5 dark:border-slate-800 ${stickyBg} ${
                             type === "school" ? "pl-8" : ""
                           }`}
                         >
