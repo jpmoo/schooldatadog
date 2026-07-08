@@ -32,6 +32,7 @@ DICT_USERS = {"ell", "gradrate", "sdr"}  # datasets whose build() consumes --dic
 # dataset -> (zip name globs, member glob, member exts, dict glob or None)
 DATASETS = [
     ("enrollment", ["enrollment_*.zip", "ENROLLMENT_*.zip"], "ENROLL*", {".mdb"}, None),
+    ("demographics", ["enrollment_*.zip", "ENROLLMENT_*.zip"], "ENROLL*", {".mdb"}, None),
     ("ell", ["ell_*.zip"], "*ELL*", {".accdb", ".mdb"}, "*Variable*.xlsx"),
     ("gradrate", ["gradrate.zip"], "*", {".mdb"}, "*ReadMe*.pdf"),
     ("pathways", ["pathways.zip"], "*", {".mdb"}, None),

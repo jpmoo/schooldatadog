@@ -71,6 +71,13 @@
       "when": 1783471222054,
       "tag": "0009_delete_county_aggregates",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783474047247,
+      "tag": "0010_delete_county_summary_aggregates",
+      "breakpoints": true
     }
   ]
 }

@@ -22,6 +22,7 @@ from .model import FactRecord
 # dataset key -> module name under sdd_ingest.datasets
 DATASETS = {
     "enrollment": "enrollment",
+    "demographics": "demographics",
     "ell": "ell",
     "gradrate": "gradrate",
     "pathways": "pathways",
