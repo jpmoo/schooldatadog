@@ -18,6 +18,7 @@ export type IconName =
   | "spec"
   | "showHideEmpty"
   | "showHidePanel"
+  | "user"
   | "visualizer";
 
 /**

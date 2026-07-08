@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/icon";
 import { changeMyPassword } from "@/lib/account/actions";
 
 type AccountUser = { name: string | null; email: string; role: string };
@@ -11,9 +12,10 @@ export function AccountMenu({ user }: { user: AccountUser }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="hidden text-sm text-slate-500 hover:text-slate-800 sm:inline dark:text-slate-400 dark:hover:text-slate-200"
+        className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
         title="Account settings"
       >
+        <Icon name="user" className="h-4 w-4" />
         {user.name || user.email}
       </button>
       {open && <AccountModal user={user} onClose={() => setOpen(false)} />}

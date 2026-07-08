@@ -29,7 +29,7 @@ export default function RootLayout({
   const iconNames = [
     "apply", "calcualtedField", "clear", "dashboard", "dataWorkshop", "delete", "export", "logout",
     "myDistrictSchools", "open", "rename", "saveViewOrGroup", "savedItems", "Settings", "spec",
-    "showHideEmpty", "showHidePanel", "visualizer",
+    "showHideEmpty", "showHidePanel", "user", "visualizer",
   ];
   const cssVars = {
     "--brand-logo-src": `url("${basePath}/SchoolDataDog.svg")`,
