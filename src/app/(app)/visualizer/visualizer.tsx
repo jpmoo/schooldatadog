@@ -27,6 +27,15 @@ const MARK_OPTIONS = [
   { value: "tick", label: "Ticks" },
   { value: "rect", label: "Heatmap" },
 ] as const;
+const BUBBLE_OPTIONS = [
+  { v: "circle-filled", label: "Filled circle" },
+  { v: "circle-outline", label: "Outline circle" },
+  { v: "square-filled", label: "Filled square" },
+  { v: "square-outline", label: "Outline square" },
+  { v: "diamond-filled", label: "Filled diamond" },
+  { v: "diamond-outline", label: "Outline diamond" },
+  { v: "none", label: "None" },
+] as const;
 const PRIMARY_CHANNELS = [
   { ch: "x", label: "Bottom axis", hint: "What runs left-to-right." },
   { ch: "y", label: "Left axis", hint: "What runs bottom-to-top (usually the number)." },
@@ -665,9 +674,27 @@ export function Visualizer({
     });
   }
   // Outline emphasis needs a mark with a separate fill + border.
-  const outlineOk = ["bar", "point", "rect"].includes(
-    typeof spec.mark === "string" ? spec.mark : "bar",
-  );
+  const markStr = typeof spec.mark === "string" ? spec.mark : "bar";
+  const outlineOk = ["bar", "rect"].includes(markStr);
+
+  // Point/marker options apply to scatter + line marks.
+  const hasPoints = markStr === "point" || markStr === "line";
+  const bubbleVal = typeof spec.points?.bubble === "string"
+    ? spec.points.bubble
+    : markStr === "line" ? "none" : "circle-outline";
+  const pointSizeVal = typeof spec.points?.size === "number" ? spec.points.size : "";
+  const sizeField = (spec.encoding?.size as Record<string, unknown> | undefined)?.field;
+  const setBubble = (v: string) => setSpec((s) => ({ ...s, points: { ...(s.points ?? {}), bubble: v } }));
+  const setPointSize = (raw: string) =>
+    setSpec((s) => {
+      const n = Number(raw);
+      const points = { ...(s.points ?? {}) };
+      if (raw.trim() !== "" && !Number.isNaN(n) && n > 0) points.size = n;
+      else delete points.size;
+      return { ...s, points: Object.keys(points).length ? points : undefined };
+    });
+  const setDataLabels = (on: boolean) => setSpec((s) => ({ ...s, dataLabels: on || undefined }));
+  const canDataLabel = ["bar", "point", "line", "area", "tick"].includes(markStr);
 
   // When a bar chart has a field spanning multiple years, those years need to be
   // laid out — side by side (grouped) or stacked. Offer that as one clear choice.
@@ -1075,12 +1102,13 @@ export function Visualizer({
             <span>More layout options</span>
           </button>
           {advOpen &&
-            ADVANCED_CHANNELS.map(({ ch, label, hint }) => {
+            ADVANCED_CHANNELS.filter(({ ch }) =>
+              // Side-by-side bars only for bar charts; Bubble size lives in its
+              // own Points section below; column/row faceting is always OK.
+              ch === "size" ? false : ch === "xOffset" ? chartType === "bar" : true,
+            ).map(({ ch, label, hint }) => {
               const def = spec.encoding?.[ch];
-              // Splitting/faceting only makes sense over a category (Year,
-              // County, Type, …), not a numeric measure — so those channels
-              // offer the dimension columns only. Size stays numeric-friendly.
-              const opts = ch === "size" ? columns : columns.filter((c) => c.kind === "builtin");
+              const opts = columns.filter((c) => c.kind === "builtin");
               return (
                 <label key={ch} className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
@@ -1094,7 +1122,44 @@ export function Visualizer({
               );
             })}
 
+          {hasPoints && (
+            <>
+              <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Points</p>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-600 dark:text-slate-300">Bubble type</span>
+                <select value={bubbleVal} onChange={(e) => setBubble(e.target.value)} className={`${input} w-full`}>
+                  {BUBBLE_OPTIONS.map((o) => (<option key={o.v} value={o.v}>{o.label}</option>))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-600 dark:text-slate-300">Bubble size</span>
+                <select value={(sizeField as string) ?? ""} onChange={(e) => setChannel("size", e.target.value)} className={`${input} w-full`}>
+                  <option value="">Standard</option>
+                  {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
+                </select>
+                {!sizeField && (
+                  <input
+                    type="number"
+                    min={1}
+                    step="any"
+                    value={pointSizeVal}
+                    onChange={(e) => setPointSize(e.target.value)}
+                    placeholder="size (px), auto"
+                    className={`${input} w-full text-xs`}
+                    style={{ color: pointSizeVal === "" ? "#94a3b8" : undefined }}
+                  />
+                )}
+              </label>
+            </>
+          )}
+
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Style</p>
+          {canDataLabel && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!spec.dataLabels} onChange={(e) => setDataLabels(e.target.checked)} />
+              <span className="text-slate-600 dark:text-slate-300">Show data labels</span>
+            </label>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

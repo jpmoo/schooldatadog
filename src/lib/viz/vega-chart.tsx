@@ -27,6 +27,9 @@ function themeConfig(theme: ChartSpec["theme"]) {
     },
     legend: { labelFont: font, titleFont: font, labelColor: "#334155", titleColor: "#334155" },
     title: { font, color: "#0f172a", fontSize: 16, anchor: "start" as const },
+    // Single-series marks use the palette's primary, so a "recolour my district"
+    // (whose fallback is that same colour) leaves everyone else unchanged.
+    mark: { color: category[0] },
     range: { category },
     view: { stroke: "transparent" },
   };
@@ -147,7 +150,7 @@ function toVegaLite(
 
   // Outline (stroke) highlight is meaningless on line/area/tick marks (stroke is
   // the mark itself), so drop it there rather than render invisible lines.
-  if (markStr === "line" || markStr === "area" || markStr === "tick") {
+  if (markStr === "line" || markStr === "area" || markStr === "tick" || markStr === "point") {
     if (hasHomeCond(e.stroke)) delete e.stroke;
     if (hasHomeCond(e.strokeWidth)) delete e.strokeWidth;
   }
@@ -182,7 +185,67 @@ function toVegaLite(
     extraTransform.push({ calculate: "datum.homeDistrict === 'My district' ? 1 : 0", as: "_home" });
   }
 
-  const chartLayer = { mark: spec.mark ?? "bar", encoding };
+  // Point / marker style (Bubble type + size) for scatter + line marks.
+  const bubbleStyle = () => {
+    const p = spec.points ?? {};
+    const bubble = typeof p.bubble === "string" ? p.bubble : "";
+    const size = typeof p.size === "number" ? p.size : undefined;
+    let shape: string | undefined;
+    let filled: boolean | undefined;
+    if (bubble && bubble !== "none") {
+      const [sh, fill] = bubble.split("-");
+      shape = sh;
+      filled = fill === "filled";
+    }
+    return { bubble, shape, filled, size };
+  };
+
+  let mark: unknown = spec.mark ?? "bar";
+  if (markStr === "point") {
+    const { bubble, shape, filled, size } = bubbleStyle();
+    if (bubble === "none") mark = { type: "point", opacity: 0 };
+    else if (shape || filled !== undefined || size !== undefined) {
+      mark = {
+        type: "point",
+        ...(shape ? { shape } : {}),
+        ...(filled !== undefined ? { filled } : {}),
+        ...(size !== undefined ? { size } : {}),
+      };
+    }
+  } else if (markStr === "line") {
+    const { bubble, shape, filled, size } = bubbleStyle();
+    const point =
+      bubble === "none" || bubble === ""
+        ? false
+        : {
+            ...(shape ? { shape } : {}),
+            ...(filled !== undefined ? { filled } : {}),
+            ...(size !== undefined ? { size } : {}),
+          };
+    mark = { type: "line", point };
+  }
+
+  // Value labels: a text layer positioned at each mark (positional channels only,
+  // so the labels don't inherit the series colour/size).
+  const labelLayers: Record<string, unknown>[] = [];
+  if (spec.dataLabels && !faceted && ["bar", "point", "line", "area", "tick"].includes(markStr)) {
+    const encRec = encoding as Record<string, unknown>;
+    const yd2 = encRec.y as Record<string, unknown> | undefined;
+    if (yd2) {
+      const posEnc: Record<string, unknown> = {};
+      for (const k of ["x", "y", "xOffset"]) if (encRec[k]) posEnc[k] = encRec[k];
+      const textDef: Record<string, unknown> = { type: "quantitative", format: ".0f" };
+      if (typeof yd2.field === "string") textDef.field = yd2.field;
+      if (typeof yd2.aggregate === "string") textDef.aggregate = yd2.aggregate;
+      labelLayers.push({
+        mark: { type: "text", dy: -7, fontSize: 9, color: "#334155" },
+        encoding: { ...posEnc, text: textDef },
+      });
+    }
+  }
+
+  const base = { mark, encoding };
+  const chartLayer = labelLayers.length ? { layer: [base, ...labelLayers] } : base;
 
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",

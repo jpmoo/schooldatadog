@@ -93,6 +93,14 @@ export const chartSpecSchema = z.object({
   theme: z.enum(["app", "print"]).default("app"),
   colors: z.record(z.string(), z.string()).optional(), // series/value → hex override
   showLegend: z.boolean().optional(), // default true; false hides colour/size legends
+  dataLabels: z.boolean().optional(), // show value labels on the marks
+  // Point/marker style for scatter + line marks.
+  points: z
+    .object({
+      bubble: z.string().optional(), // "circle-filled" | "circle-outline" | "square-…" | "diamond-…" | "none"
+      size: z.number().optional(), // fixed marker size in px (when Bubble size = Standard)
+    })
+    .optional(),
   // The AI conversation that built this chart, persisted so it restores on load.
   chat: z.array(chatMessageSchema).optional(),
 });
