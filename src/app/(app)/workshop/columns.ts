@@ -53,7 +53,7 @@ export type SavedColumn = SavedDataColumn | CalcColumn;
 
 export type SavedViewState = {
   year: string;
-  viewMode: "districts" | "both";
+  viewMode: "districts" | "both" | "schools";
   county: string;
   hidden: number[];
   collapsed: number[];

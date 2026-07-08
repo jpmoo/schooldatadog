@@ -160,7 +160,8 @@ function SheetDrop({
 
 // ── main ──────────────────────────────────────────────────────────────────
 
-type Row = { entity: WorkshopEntity; type: "district" | "school"; collapsible: boolean };
+type Row = { entity: WorkshopEntity; type: "district" | "school"; collapsible: boolean; rank: string };
+type ViewMode = "districts" | "both" | "schools";
 type Ctx = { key: string; kind: "name" | "data" | "calc"; calcId?: string; x: number; y: number };
 
 export function Workshop({
@@ -187,7 +188,7 @@ export function Workshop({
   const [metrics, setMetrics] = useState<MetricLite[]>(initialMetrics);
   const [isSearching, startSearch] = useTransition();
 
-  const [viewMode, setViewMode] = useState<"districts" | "both">("districts");
+  const [viewMode, setViewMode] = useState<ViewMode>("districts");
   const [county, setCounty] = useState("");
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [entityPanel, setEntityPanel] = useState(false);
@@ -241,6 +242,7 @@ export function Workshop({
     () =>
       entities.filter((e) => {
         if (viewMode === "districts" && e.type !== "district") return false;
+        if (viewMode === "schools" && e.type !== "school") return false;
         if (county && e.county !== county) return false;
         if (hidden.has(e.id)) return false;
         return true;
@@ -294,11 +296,13 @@ export function Workshop({
     const isEmpty = (id: number) => columns.length > 0 && columns.every((c) => getVal(c, id) === null);
     const show = (id: number) => !hideEmpty || !isEmpty(id);
 
-    if (viewMode === "districts") {
+    // Flat list: districts-only or schools-only.
+    if (viewMode !== "both") {
+      const type = viewMode === "schools" ? "school" : "district";
       return [...visibleEntities]
         .filter((e) => show(e.id))
         .sort(cmpD)
-        .map((e) => ({ entity: e, type: "district" as const, collapsible: false }));
+        .map((e, i) => ({ entity: e, type, collapsible: false, rank: String(i + 1) }));
     }
 
     const districts = visibleEntities.filter((e) => e.type === "district").sort(cmpD);
@@ -311,21 +315,26 @@ export function Workshop({
     }
     const districtIds = new Set(districts.map((d) => d.id));
     const out: Row[] = [];
+    // Districts rank 1..N; each school ranks "[district].[school-within-district]".
+    let districtRank = 0;
     for (const d of districts) {
       const kids = (byParent.get(d.id) ?? []).filter((s) => show(s.id));
       // Keep a district if it has data itself or has any shown school under it.
       if (!show(d.id) && kids.length === 0) continue;
-      out.push({ entity: d, type: "district", collapsible: kids.length > 0 });
+      districtRank++;
+      out.push({ entity: d, type: "district", collapsible: kids.length > 0, rank: String(districtRank) });
       if (kids.length && !collapsed.has(d.id)) {
-        for (const s of [...kids].sort(cmpS))
-          out.push({ entity: s, type: "school", collapsible: false });
+        [...kids].sort(cmpS).forEach((s, si) =>
+          out.push({ entity: s, type: "school", collapsible: false, rank: `${districtRank}.${si + 1}` }),
+        );
       }
     }
     const orphans = schools.filter(
       (s) => (s.parentDistrictId == null || !districtIds.has(s.parentDistrictId)) && show(s.id),
     );
-    for (const s of orphans.sort(cmpS))
-      out.push({ entity: s, type: "school", collapsible: false });
+    orphans.sort(cmpS).forEach((s, oi) =>
+      out.push({ entity: s, type: "school", collapsible: false, rank: String(oi + 1) }),
+    );
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleEntities, viewMode, districtSort, schoolSort, collapsed, calcValues, columns, hideEmpty]);
@@ -834,8 +843,9 @@ export function Workshop({
             >
               {paneHidden ? "⟩ Panel" : "⟨ Panel"}
             </button>
-            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as "districts" | "both")} className={btn}>
+            <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)} className={btn}>
               <option value="districts">Districts only</option>
+              <option value="schools">Schools only</option>
               <option value="both">Districts &amp; schools</option>
             </select>
             <select value={county} onChange={(e) => setCounty(e.target.value)} className={btn}>
@@ -957,7 +967,7 @@ export function Workshop({
                             }
                           />
                         </div>
-                        <div className="w-[48px]" />
+                        <div className="w-[56px]" />
                         <div
                           onContextMenu={(e) => {
                             e.preventDefault();
@@ -997,7 +1007,7 @@ export function Workshop({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ entity: e, type, collapsible }, i) => {
+                  {rows.map(({ entity: e, type, collapsible, rank }) => {
                     const isHomeDistrict = e.id === homeDistrictId;
                     // Highlight the home district and every school within it.
                     const isHome =
@@ -1017,8 +1027,8 @@ export function Workshop({
                                 onChange={() => toggleSelected(e.id)}
                               />
                             </div>
-                            <div className="flex w-[48px] items-center justify-center py-1.5 text-xs tabular-nums text-slate-400">
-                              {i + 1}
+                            <div className="flex w-[56px] items-center justify-center py-1.5 text-xs tabular-nums text-slate-400">
+                              {rank}
                             </div>
                             <div
                               className={`min-w-[240px] flex-1 px-3 py-1.5 ${type === "school" ? "pl-8" : ""}`}
@@ -1073,7 +1083,9 @@ export function Workshop({
 
         {entityPanel && (
           <EntityPanel
-            entities={entities.filter((e) => viewMode === "both" || e.type === "district")}
+            entities={entities.filter((e) =>
+              viewMode === "districts" ? e.type === "district" : viewMode === "schools" ? e.type === "school" : true,
+            )}
             county={county}
             hidden={hidden}
             setHidden={applyHidden}
@@ -1432,7 +1444,7 @@ function SortMenu({
   expandAll,
 }: {
   ctx: Ctx;
-  view: "districts" | "both";
+  view: ViewMode;
   applySort: (level: "district" | "school", key: string, dir: "asc" | "desc", add: boolean) => void;
   clearSorts: () => void;
   onEdit: (id: string) => void;
