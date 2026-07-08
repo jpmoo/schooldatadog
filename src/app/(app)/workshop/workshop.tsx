@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -2038,8 +2038,22 @@ function SortMenu({
     </>
   );
 
+  // Keep the menu inside the viewport when right-clicking near an edge.
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: ctx.y, left: ctx.x });
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const pad = 8;
+    const { width, height } = el.getBoundingClientRect();
+    setPos({
+      top: Math.max(pad, Math.min(ctx.y, window.innerHeight - height - pad)),
+      left: Math.max(pad, Math.min(ctx.x, window.innerWidth - width - pad)),
+    });
+  }, [ctx.x, ctx.y]);
+
   return (
-    <div className="fixed z-50 w-52 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900" style={{ top: ctx.y, left: ctx.x }}>
+    <div ref={menuRef} className="fixed z-50 w-52 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900" style={{ top: pos.top, left: pos.left }}>
       {ctx.kind === "calc" && ctx.calcId && (
         <>
           <Item onClick={() => onEdit(ctx.calcId!)}>Edit calculated field…</Item>

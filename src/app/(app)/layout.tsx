@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { Icon } from "@/components/icon";
 import { AccountMenu } from "@/app/(app)/_components/account-menu";
 import { DashboardLink } from "@/app/(app)/_components/dashboard-link";
+import { WarmUp } from "@/app/(app)/_components/warm-up";
 import { db } from "@/db";
 import { entities, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/guards";
@@ -28,6 +29,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+      <WarmUp />
       {impersonating && (
         <div className="flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-sm font-medium text-white">
           <span>
