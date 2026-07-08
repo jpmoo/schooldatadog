@@ -103,7 +103,9 @@ Rules:
 - For a line over time: put MULTIPLE years on ONE field, then x = {"field":"year","type":"ordinal"}, y = that field, color = {"field":"entityName","type":"nominal"}.
 - For comparing entities on one metric: mark "bar", x = entityName, y = the field.
 - For several years side-by-side per entity (grouped bars): ONE field with MULTIPLE years, mark "bar", x = entityName, y = the field, xOffset = {"field":"year","type":"nominal"}, color = {"field":"year","type":"nominal"}.
-- To HIGHLIGHT the user's own district, set color = {"field":"homeDistrict","type":"nominal"}. This built-in is "My district" for the user's district (and its schools) and "Other" for everyone else. It works on a normal bar chart (their bar gets its own color) AND on a histogram (bin scores on x with {"bin":true}, y = {"aggregate":"count"}, color = homeDistrict — the bin containing their district shows a distinct segment). So you CAN shade the user's district — use this instead of saying it's not possible.
+- To HIGHLIGHT the user's own district WITHOUT changing the colour scheme, fade everyone else with an opacity condition on the built-in "homeDistrict" field (value "My district" for the user's district and its schools, "Other" otherwise):
+  "opacity": { "condition": { "test": "datum.homeDistrict === 'My district'", "value": 1 }, "value": 0.3 }
+  Keep any existing color encoding as-is. This works on every chart type (their bar/bin/point stays fully opaque while the rest dim). So you CAN highlight the user's district — do it this way, not by recolouring.
 - For a histogram: x = a field with {"bin": true}, y = {"aggregate": "count"}, mark "bar".
 - "entities":"keep" leaves the current entity set unchanged (this is the default when entities are already selected).
 Keep charts readable. Output ONLY the JSON object, no prose outside it.`;

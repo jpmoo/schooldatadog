@@ -578,13 +578,32 @@ export function Visualizer({
     });
   }
 
-  // Highlight the user's own district by colouring on the homeDistrict column.
-  const highlightOn = (spec.encoding?.color as Record<string, unknown> | undefined)?.field === "homeDistrict";
-  function setHighlight(on: boolean) {
+  // Highlight the user's own district WITHOUT touching the colour scheme: either
+  // fade everyone else (opacity) or draw a bold outline (stroke) on their marks.
+  const HL_TEST = "datum.homeDistrict === 'My district'";
+  const hlConds = (k: string) => {
+    const c = (spec.encoding?.[k] as Record<string, unknown> | undefined)?.condition as
+      | Record<string, unknown>
+      | undefined;
+    return typeof c?.test === "string" && c.test.includes("homeDistrict");
+  };
+  const highlightMode = hlConds("opacity") ? "fade" : hlConds("stroke") ? "outline" : "none";
+  function setHighlightMode(mode: string) {
     setSpec((s) => {
       const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
-      if (on) enc.color = { field: "homeDistrict", type: "nominal" };
-      else if ((enc.color as Record<string, unknown> | undefined)?.field === "homeDistrict") delete enc.color;
+      // Remove any existing home-district highlight channels first.
+      for (const k of ["opacity", "stroke", "strokeWidth"]) {
+        const c = (enc[k] as Record<string, unknown> | undefined)?.condition as
+          | Record<string, unknown>
+          | undefined;
+        if (typeof c?.test === "string" && c.test.includes("homeDistrict")) delete enc[k];
+      }
+      if (mode === "fade") {
+        enc.opacity = { condition: { test: HL_TEST, value: 1 }, value: 0.3 };
+      } else if (mode === "outline") {
+        enc.stroke = { condition: { test: HL_TEST, value: "#0f172a" }, value: null };
+        enc.strokeWidth = { condition: { test: HL_TEST, value: 2.5 }, value: 0 };
+      }
       return { ...s, encoding: enc as ChartSpec["encoding"] };
     });
   }
@@ -916,12 +935,16 @@ export function Visualizer({
             <span className="text-slate-600 dark:text-slate-300">Show legend</span>
           </label>
           {homeDistrictName && (
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={highlightOn} onChange={(e) => setHighlight(e.target.checked)} />
+            <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600 dark:text-slate-300">
-                Highlight my district{" "}
-                <span className="text-slate-400">({homeDistrictName})</span>
+                Highlight my district <span className="text-slate-400">({homeDistrictName})</span>
               </span>
+              <select value={highlightMode} onChange={(e) => setHighlightMode(e.target.value)} className={input}>
+                <option value="none">None</option>
+                <option value="fade">Fade the others</option>
+                <option value="outline">Outline it</option>
+              </select>
+              <span className="text-[11px] text-slate-400">Emphasises your district without changing the colours.</span>
             </label>
           )}
           {(["x", "y"] as const).map((ax) =>
