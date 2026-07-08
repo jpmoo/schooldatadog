@@ -95,12 +95,16 @@ export async function getLogFilterOptions(): Promise<{
     db.selectDistinct({ action: activityLog.action }).from(activityLog),
   ]);
 
+  // Offer every known action type in the filter (plus any unknown ones already
+  // logged), so actions like visualization save/open are always selectable —
+  // even before the first such entry exists.
+  const actionValues = Array.from(
+    new Set([...Object.keys(ACTION_LABELS), ...actionRows.map((a) => a.action)]),
+  ).sort();
+
   return {
     users: userRows.map((u) => ({ id: u.id, label: u.name ? `${u.name} (${u.email})` : u.email })),
     districts: districtRows.map((d) => ({ id: d.id, name: d.name })),
-    actions: actionRows
-      .map((a) => a.action)
-      .sort()
-      .map((a) => ({ value: a, label: ACTION_LABELS[a] ?? a })),
+    actions: actionValues.map((a) => ({ value: a, label: ACTION_LABELS[a] ?? a })),
   };
 }
