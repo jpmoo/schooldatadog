@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth/guards";
 import { getChart } from "@/lib/charts/queries";
 import { getUserGroups } from "@/lib/groups/queries";
@@ -11,18 +14,19 @@ export default async function VisualizerPage({
 }: {
   searchParams: Promise<{ chart?: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { chart } = await searchParams;
   const chartId = chart ? Number(chart) : NaN;
 
   const years = await getYears();
-  const [entities, initialMetrics, groups, views, demographicMetrics, saved] = await Promise.all([
+  const [entities, initialMetrics, groups, views, demographicMetrics, saved, me] = await Promise.all([
     getEntities(),
     searchMetrics("", years[0]),
     getUserGroups(),
     getUserViews(),
     getDemographicMetricCodes(),
     Number.isInteger(chartId) ? getChart(chartId) : Promise.resolve(null),
+    db.select({ homeDistrictId: users.homeDistrictId }).from(users).where(eq(users.id, user.id)),
   ]);
 
   return (
@@ -34,6 +38,7 @@ export default async function VisualizerPage({
       views={views}
       demographicMetrics={demographicMetrics}
       initialChart={saved}
+      homeDistrictId={me[0]?.homeDistrictId ?? null}
     />
   );
 }

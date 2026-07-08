@@ -70,6 +70,14 @@ export const channelSchema = z
   .passthrough();
 export type Channel = z.infer<typeof channelSchema>;
 
+/** A single turn of the Visualizer AI conversation, saved with the chart. */
+export const chatMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+  error: z.boolean().optional(),
+});
+export type ChatMessageSpec = z.infer<typeof chatMessageSchema>;
+
 export const chartSpecSchema = z.object({
   version: z.literal(1),
   title: z.string().optional(),
@@ -84,6 +92,9 @@ export const chartSpecSchema = z.object({
   // presentation
   theme: z.enum(["app", "print"]).default("app"),
   colors: z.record(z.string(), z.string()).optional(), // series/value → hex override
+  showLegend: z.boolean().optional(), // default true; false hides colour/size legends
+  // The AI conversation that built this chart, persisted so it restores on load.
+  chat: z.array(chatMessageSchema).optional(),
 });
 export type ChartSpec = z.infer<typeof chartSpecSchema>;
 

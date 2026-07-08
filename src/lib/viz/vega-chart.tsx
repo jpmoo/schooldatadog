@@ -45,11 +45,20 @@ function toVegaLite(
 ) {
   const enc = spec.encoding ?? {};
   const faceted = "column" in enc || "row" in enc || "facet" in enc;
+  const hideLegend = spec.showLegend === false;
+  const LEGEND_CHANNELS = new Set(["color", "size", "shape", "opacity", "fill", "stroke"]);
   const encoding = Object.fromEntries(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
       const friendly = typeof d.field === "string" ? labels[d.field] : undefined;
-      return [ch, { ...d, title: d.title ?? friendly ?? d.field }];
+      return [
+        ch,
+        {
+          ...d,
+          title: d.title ?? friendly ?? d.field,
+          ...(hideLegend && LEGEND_CHANNELS.has(ch) ? { legend: null } : {}),
+        },
+      ];
     }),
   );
   return {

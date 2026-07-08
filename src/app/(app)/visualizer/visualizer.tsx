@@ -56,6 +56,7 @@ export function Visualizer({
   views,
   demographicMetrics,
   initialChart,
+  homeDistrictId,
 }: {
   years: string[];
   entities: WorkshopEntity[];
@@ -64,6 +65,7 @@ export function Visualizer({
   views: SavedViewMeta[];
   demographicMetrics: string[];
   initialChart: { id: number; name: string; spec: ChartSpec } | null;
+  homeDistrictId: number | null;
 }) {
   const entitiesById = useMemo(() => new Map(entities.map((e) => [e.id, e])), [entities]);
   const demoSet = useMemo(() => new Set(demographicMetrics), [demographicMetrics]);
@@ -71,8 +73,16 @@ export function Visualizer({
     () => [...new Set(entities.map((e) => e.county).filter(Boolean))].sort() as string[],
     [entities],
   );
+  const homeDistrictName = homeDistrictId != null ? (entitiesById.get(homeDistrictId)?.name ?? null) : null;
 
-  const [spec, setSpec] = useState<ChartSpec>(initialChart?.spec ?? blankSpec());
+  // Split any saved AI chat out of the spec — it restores into the chat panel,
+  // not the live chart spec (keeps the JSON/render clean).
+  const [spec, setSpec] = useState<ChartSpec>(() => {
+    const s = initialChart?.spec ?? blankSpec();
+    const withoutChat = { ...s };
+    delete withoutChat.chat;
+    return withoutChat;
+  });
   const [chartId, setChartId] = useState<number | null>(initialChart?.id ?? null);
   const [name, setName] = useState(initialChart?.name ?? "");
   const [rows, setRows] = useState<Row[]>([]);
@@ -244,9 +254,10 @@ export function Visualizer({
   }
 
   // ── AI assistant ──
-  const [aiOpen, setAiOpen] = useState(false);
+  const initialChat = (initialChart?.spec.chat ?? []) as (ChatMessage & { error?: boolean })[];
+  const [aiOpen, setAiOpen] = useState(initialChat.length > 0);
   const [aiInput, setAiInput] = useState("");
-  const [aiMsgs, setAiMsgs] = useState<(ChatMessage & { error?: boolean })[]>([]);
+  const [aiMsgs, setAiMsgs] = useState<(ChatMessage & { error?: boolean })[]>(initialChat);
   const [aiBusy, setAiBusy] = useState(false);
   const aiScroll = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -325,6 +336,10 @@ export function Visualizer({
       years,
       subgroups: STD_SUBGROUPS,
       groups: groups.map((g) => g.name),
+      homeDistrict: homeDistrictName,
+      selectedEntities: spec.data.entities.ids
+        .map((id) => entitiesById.get(id)?.name)
+        .filter((n): n is string => !!n),
     });
     setAiBusy(false);
     if (res.ok) {
@@ -446,6 +461,41 @@ export function Visualizer({
       return { ...s, encoding: enc };
     });
 
+  // Set the "increment" on an axis. For a binned axis (e.g. a histogram) this is
+  // the bin width; otherwise it's the tick spacing. 0/empty reverts to auto.
+  const setAxisStep = (ch: string, step: number) =>
+    setSpec((s) => {
+      const cur = s.encoding?.[ch] as Record<string, unknown> | undefined;
+      if (!cur) return s;
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      const next: Record<string, unknown> = { ...cur };
+      const binned = cur.bin !== undefined && cur.bin !== false;
+      if (binned) {
+        const bin = typeof cur.bin === "object" ? { ...(cur.bin as Record<string, unknown>) } : {};
+        if (step > 0) bin.step = step;
+        else delete bin.step;
+        next.bin = Object.keys(bin).length ? bin : true;
+      } else {
+        const axis = { ...((cur.axis as Record<string, unknown> | undefined) ?? {}) };
+        if (step > 0) axis.tickMinStep = step;
+        else delete axis.tickMinStep;
+        if (Object.keys(axis).length) next.axis = axis;
+        else delete next.axis;
+      }
+      enc[ch] = next;
+      return { ...s, encoding: enc as ChartSpec["encoding"] };
+    });
+  const axisStepOf = (ch: string) => {
+    const cur = spec.encoding?.[ch] as Record<string, unknown> | undefined;
+    if (!cur) return "";
+    if (typeof cur.bin === "object") {
+      const step = (cur.bin as Record<string, unknown>).step;
+      return typeof step === "number" ? step : "";
+    }
+    const a = cur.axis as Record<string, unknown> | undefined;
+    return typeof a?.tickMinStep === "number" ? a.tickMinStep : "";
+  };
+
   function applyJson() {
     try {
       setSpec(JSON.parse(jsonText));
@@ -457,7 +507,12 @@ export function Visualizer({
   async function save() {
     setSaveMsg(null);
     const nm = name.trim() || spec.title?.trim() || "Untitled chart";
-    const res = chartId ? await updateChart(chartId, spec, nm) : await createChart(nm, spec);
+    // Persist the AI conversation alongside the chart so it restores on load.
+    const specToSave: ChartSpec = {
+      ...spec,
+      chat: aiMsgs.map((m) => ({ role: m.role, content: m.content, ...(m.error ? { error: true } : {}) })),
+    };
+    const res = chartId ? await updateChart(chartId, specToSave, nm) : await createChart(nm, specToSave);
     if (res.ok) {
       setChartId(res.chart.id);
       setName(res.chart.name);
@@ -742,6 +797,48 @@ export function Visualizer({
             })}
 
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Style</p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={spec.showLegend !== false}
+              onChange={(e) => setSpec((s) => ({ ...s, showLegend: e.target.checked }))}
+            />
+            <span className="text-slate-600 dark:text-slate-300">Show legend</span>
+          </label>
+          {(spec.encoding?.x?.field || spec.encoding?.y?.field) && (
+            <div className="flex gap-2">
+              {spec.encoding?.x?.field && (
+                <label className="flex flex-1 flex-col gap-1 text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">X step</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={axisStepOf("x")}
+                    onChange={(e) => setAxisStep("x", Number(e.target.value))}
+                    placeholder="auto"
+                    className={`${input} w-full`}
+                    title="Tick increment on the bottom axis"
+                  />
+                </label>
+              )}
+              {spec.encoding?.y?.field && (
+                <label className="flex flex-1 flex-col gap-1 text-sm">
+                  <span className="text-slate-600 dark:text-slate-300">Y step</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={axisStepOf("y")}
+                    onChange={(e) => setAxisStep("y", Number(e.target.value))}
+                    placeholder="auto"
+                    className={`${input} w-full`}
+                    title="Tick increment on the left axis"
+                  />
+                </label>
+              )}
+            </div>
+          )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Palette</span>
             <select value={spec.theme} onChange={(e) => setSpec((s) => ({ ...s, theme: e.target.value as ChartSpec["theme"] }))} className={input}>
