@@ -305,7 +305,7 @@ export function Workshop({
   }, [aiMsgs, aiBusy]);
 
   // Apply an AI "sheet" command: set the data + calculated columns, view/filters/sort.
-  async function applyAiSheet(sheet: unknown) {
+  async function applyAiSheet(sheet: unknown, reply = "") {
     if (!sheet || typeof sheet !== "object") return;
     const s = sheet as Record<string, unknown>;
     if (s.viewMode === "districts" || s.viewMode === "schools" || s.viewMode === "both") setViewMode(s.viewMode);
@@ -385,6 +385,42 @@ export function Workshop({
       });
     }
 
+    // Last resort: the model described a calculated field in its reply but didn't
+    // emit it structurally. Infer one from the reply over all the data columns.
+    if (calcCols.length === 0 && dataCols.length > 0 && reply) {
+      const r = reply.toLowerCase();
+      const type: CalcType | null = /similar/.test(r)
+        ? "similarity"
+        : /\brank|percentile/.test(r)
+          ? "rank"
+          : /\baverage|\bavg\b/.test(r)
+            ? "avg"
+            : /\bchange\b/.test(r)
+              ? "change"
+              : null;
+      if (type) {
+        const ids = dataCols.map((d) => d.id);
+        const weights: Record<string, number> = {};
+        if (type === "rank" || type === "similarity") {
+          const base = Math.floor(100 / ids.length);
+          ids.forEach((sid) => (weights[sid] = base));
+          weights[ids[0]] += 100 - base * ids.length;
+        }
+        // similarity reference: an entity named in the reply, else the home district.
+        const namedRef = entities.find((e) => e.name && r.includes(e.name.toLowerCase()))?.id ?? null;
+        calcCols.push({
+          id: `calc-ai${stamp}-inferred`,
+          kind: "calc",
+          calcType: type,
+          name: CALC_LABELS[type],
+          sourceIds: ids,
+          weights,
+          asPercent: false,
+          refEntityId: type === "similarity" ? (namedRef ?? homeDistrictId) : null,
+        });
+      }
+    }
+
     setColumns([...dataCols, ...calcCols]); // replaces every column
     for (const col of dataCols) {
       const vals = await getColumnValues(col.metric.code, col.year, col.subgroup);
@@ -394,15 +430,22 @@ export function Workshop({
     }
 
     const so = s.sort as Record<string, unknown> | null | undefined;
+    const rankCalc = calcCols.find((c) => c.calcType === "similarity" || c.calcType === "rank");
     if (so && typeof so === "object") {
       const code = String(so.metric ?? "");
       const yr = typeof so.year === "string" ? so.year : "";
       const target = dataCols.find((c) => c.metric.code === code && (!yr || c.year === yr));
-      if (target) {
-        const dir = so.direction === "asc" ? "asc" : "desc";
-        applySort("district", target.id, dir, false);
-        applySort("school", target.id, dir, false);
+      const dir = so.direction === "asc" ? "asc" : "desc";
+      // A named data column, else fall back to the similarity/rank field.
+      const key = target?.id ?? rankCalc?.id;
+      if (key) {
+        applySort("district", key, dir, false);
+        applySort("school", key, dir, false);
       }
+    } else if (rankCalc && /sort|descend|top|rank/i.test(reply)) {
+      // The model described sorting but didn't emit a sort — rank by similarity.
+      applySort("district", rankCalc.id, "desc", false);
+      applySort("school", rankCalc.id, "desc", false);
     }
   }
 
@@ -447,7 +490,7 @@ export function Workshop({
       const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
       const content = res.sheet ? (!reply || looksJson ? "Updating the table…" : reply) : reply || "(done)";
       setAiMsgs((m) => [...m, { role: "assistant", content }]);
-      if (res.sheet) void applyAiSheet(res.sheet);
+      if (res.sheet) void applyAiSheet(res.sheet, reply);
     } else {
       setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
     }
