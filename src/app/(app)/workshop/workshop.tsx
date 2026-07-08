@@ -789,12 +789,12 @@ export function Workshop({
           <button
             onClick={() => setPaneHidden(false)}
             title="Show metrics panel"
-            className="flex w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:hover:text-slate-200"
+            className="flex w-9 shrink-0 items-start justify-center rounded-lg border border-slate-200 bg-white pt-1.5 text-slate-500 hover:text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:hover:text-slate-200"
           >
             <Icon name="showHidePanel" flip className="h-6 w-6" />
           </button>
         ) : (
-        <aside className="flex w-[30%] min-w-[260px] flex-col gap-3 overflow-hidden">
+        <aside className="flex w-[30%] min-w-[260px] flex-col gap-3 overflow-hidden px-1">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold uppercase tracking-wide text-slate-400">Metrics</span>
             <button
