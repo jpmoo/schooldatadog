@@ -78,17 +78,29 @@ Reply with a single JSON object: { "reply": string, "sheet": <sheet or null> }.
 
 A "sheet" object looks like:
 {
-  "columns": [ { "metric": "<code>", "year": "2023-24", "subgroup": "All Students" } ],
+  "columns": [ { "id": "c1", "metric": "<code>", "year": "2023-24", "subgroup": "All Students" } ],
+  "calc": [ { "name": "My score", "type": "avg", "sources": ["c1","c2"], "weights": {"c1":50,"c2":50}, "asPercent": false, "refDistrict": "<district name>" } ],
   "viewMode": "districts" | "schools" | "both" | "keep",
   "county": "<county name>" | "all" | "keep",
   "group": "<group name>" | "none" | "keep",
   "sort": { "metric": "<code>", "year": "2023-24", "direction": "desc" | "asc" } | null
 }
+
+Calculated fields (the "calc" array) derive new columns from the data columns:
+- "avg" — average of the source columns.
+- "change" — change across the sources, first to last (set "asPercent": true for percent change).
+- "avgchange" — average column-to-column change (supports "asPercent").
+- "rank" — weighted percentile ranking of the sources (use "weights", a per-source 0-100 map that sums to 100).
+- "similarity" — weighted similarity of each row to one reference district (needs "refDistrict" plus "weights").
+Each calc references data columns by their "id" handle, so give the columns you need an "id".
+
 Rules:
-- "columns" REPLACES all data columns — list every column you want, left to right. Each is a metric code + year + subgroup. For several years of one metric, add one column per year.
-- "metric" MUST be a code above; "year"/"subgroup"/"group"/"county" MUST be from the lists above.
+- "columns" REPLACES all columns (data + calc). List every data column you want, left to right, each a metric code + year + subgroup + optional "id". Add "calc" fields after.
+- "metric" MUST be a code above; "year"/"subgroup"/"group"/"county"/"refDistrict" MUST be real values from the lists above.
+- "calc" "sources" and "weights" keys MUST be "id"s you defined in "columns".
 - "viewMode":"keep", "county":"keep", "group":"keep" leave those as they are. "county":"all" clears the county filter; "group":"none" clears the group filter.
-- "sort" (optional) sorts the rows by one of your columns.
+- "sort" (optional) sorts the rows by one of your data columns.
+You can also SUGGEST a calculated field in "reply" (describe it) and only add it to "calc" when the user agrees.
 Return the FULL sheet each time (it replaces the current columns). Output ONLY the JSON object, no prose outside it.`;
 }
 

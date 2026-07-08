@@ -24,11 +24,13 @@ import type { MetricLite } from "@/lib/workshop/types";
 import { CalcDialog, type CalcConfig } from "./calc-dialog";
 import {
   ALL_STUDENTS,
+  CALC_LABELS,
   compareBySortKeys,
   computeCalc,
   formatCalc,
   formatValue,
   type CalcColumn,
+  type CalcType,
   type Column,
   type DataColumn,
   type SavedViewState,
@@ -297,7 +299,7 @@ export function Workshop({
     aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
   }, [aiMsgs, aiBusy]);
 
-  // Apply an AI "sheet" command: set the data columns + view/filters/sort.
+  // Apply an AI "sheet" command: set the data + calculated columns, view/filters/sort.
   async function applyAiSheet(sheet: unknown) {
     if (!sheet || typeof sheet !== "object") return;
     const s = sheet as Record<string, unknown>;
@@ -310,33 +312,72 @@ export function Workshop({
         if (g) applyGroup(String(g.id));
       }
     }
-    if (Array.isArray(s.columns)) {
-      const stamp = Math.round(performance.now());
-      const cols: DataColumn[] = [];
-      (s.columns as Record<string, unknown>[]).forEach((c, i) => {
-        const m = metricByCode.get(String(c.metric));
-        if (!m) return;
-        const yr = typeof c.year === "string" && years.includes(c.year) ? c.year : year;
-        const sg = typeof c.subgroup === "string" ? c.subgroup : ALL_STUDENTS;
-        cols.push({ id: `data-${m.code}-${yr}-ai${stamp}-${i}`, kind: "data", metric: m, year: yr, subgroup: sg, values: {} });
-      });
-      setColumns(cols); // replaces every column (calc fields aren't AI-managed)
-      for (const col of cols) {
-        const vals = await getColumnValues(col.metric.code, col.year, col.subgroup);
-        const map: Record<number, number | null> = {};
-        for (const v of vals) map[v.entityId] = v.value;
-        setColumns((cs) => cs.map((x) => (x.id === col.id ? { ...(x as DataColumn), values: map } : x)));
-      }
-      const so = s.sort as Record<string, unknown> | null | undefined;
-      if (so && typeof so === "object") {
-        const code = String(so.metric ?? "");
-        const yr = typeof so.year === "string" ? so.year : "";
-        const target = cols.find((c) => c.metric.code === code && (!yr || c.year === yr));
-        if (target) {
-          const dir = so.direction === "asc" ? "asc" : "desc";
-          applySort("district", target.id, dir, false);
-          applySort("school", target.id, dir, false);
+    if (!Array.isArray(s.columns)) return;
+
+    const stamp = Math.round(performance.now());
+    // Build data columns and map each AI "id" handle to the real column id.
+    const dataCols: DataColumn[] = [];
+    const handleToId = new Map<string, string>();
+    (s.columns as Record<string, unknown>[]).forEach((c, i) => {
+      const m = metricByCode.get(String(c.metric));
+      if (!m) return;
+      const yr = typeof c.year === "string" && years.includes(c.year) ? c.year : year;
+      const sg = typeof c.subgroup === "string" ? c.subgroup : ALL_STUDENTS;
+      const id = `data-${m.code}-${yr}-ai${stamp}-${i}`;
+      dataCols.push({ id, kind: "data", metric: m, year: yr, subgroup: sg, values: {} });
+      if (typeof c.id === "string") handleToId.set(c.id, id);
+    });
+
+    // Build calculated columns, translating handles to real source ids.
+    const CALC_TYPES = new Set<CalcType>(["avg", "change", "avgchange", "rank", "similarity"]);
+    const calcCols: CalcColumn[] = [];
+    if (Array.isArray(s.calc)) {
+      (s.calc as Record<string, unknown>[]).forEach((c, i) => {
+        const type = String(c.type ?? "") as CalcType;
+        if (!CALC_TYPES.has(type)) return;
+        const sourceIds = (Array.isArray(c.sources) ? (c.sources as unknown[]) : [])
+          .map((h) => handleToId.get(String(h)))
+          .filter((x): x is string => !!x);
+        if (sourceIds.length === 0) return;
+        const weights: Record<string, number> = {};
+        if (c.weights && typeof c.weights === "object") {
+          for (const [h, w] of Object.entries(c.weights as Record<string, unknown>)) {
+            const gid = handleToId.get(h);
+            if (gid && typeof w === "number") weights[gid] = w;
+          }
         }
+        const refName = typeof c.refDistrict === "string" ? c.refDistrict.toLowerCase() : "";
+        const refEntityId = refName ? (entities.find((e) => e.name.toLowerCase() === refName)?.id ?? null) : null;
+        calcCols.push({
+          id: `calc-ai${stamp}-${i}`,
+          kind: "calc",
+          calcType: type,
+          name: typeof c.name === "string" && c.name ? c.name : CALC_LABELS[type],
+          sourceIds,
+          weights,
+          asPercent: c.asPercent === true,
+          refEntityId,
+        });
+      });
+    }
+
+    setColumns([...dataCols, ...calcCols]); // replaces every column
+    for (const col of dataCols) {
+      const vals = await getColumnValues(col.metric.code, col.year, col.subgroup);
+      const map: Record<number, number | null> = {};
+      for (const v of vals) map[v.entityId] = v.value;
+      setColumns((cs) => cs.map((x) => (x.id === col.id ? { ...(x as DataColumn), values: map } : x)));
+    }
+
+    const so = s.sort as Record<string, unknown> | null | undefined;
+    if (so && typeof so === "object") {
+      const code = String(so.metric ?? "");
+      const yr = typeof so.year === "string" ? so.year : "";
+      const target = dataCols.find((c) => c.metric.code === code && (!yr || c.year === yr));
+      if (target) {
+        const dir = so.direction === "asc" ? "asc" : "desc";
+        applySort("district", target.id, dir, false);
+        applySort("school", target.id, dir, false);
       }
     }
   }
@@ -348,13 +389,25 @@ export function Workshop({
     setAiMsgs((m) => [...m, { role: "user", content: text }]);
     setAiInput("");
     setAiBusy(true);
+    // Give each existing data column a stable handle so the AI can reference it
+    // (and any calc field's sources) when it re-emits the full sheet.
+    const handleOf = new Map<string, string>();
+    columns.forEach((c, i) => c.kind === "data" && handleOf.set(c.id, `c${i + 1}`));
     const state = {
       viewMode,
       county: county || "all",
       group: groups.find((g) => String(g.id) === groupFilter)?.name ?? null,
       columns: columns
         .filter((c): c is DataColumn => c.kind === "data")
-        .map((c) => ({ metric: c.metric.code, metricName: c.metric.name, year: c.year, subgroup: c.subgroup })),
+        .map((c) => ({ id: handleOf.get(c.id), metric: c.metric.code, metricName: c.metric.name, year: c.year, subgroup: c.subgroup })),
+      calc: columns
+        .filter((c): c is CalcColumn => c.kind === "calc")
+        .map((c) => ({
+          name: c.name,
+          type: c.calcType,
+          sources: c.sourceIds.map((id) => handleOf.get(id)).filter(Boolean),
+          asPercent: c.asPercent,
+        })),
     };
     const res = await worksheetChat(history, state, {
       metrics: initialMetrics.map((m) => ({ code: m.code, name: m.name, category: m.category ?? null })),
@@ -1404,7 +1457,8 @@ export function Workshop({
               {aiMsgs.length === 0 && (
                 <p className="text-sm text-slate-400">
                   Try “add grad rate and enrollment for 2023-24”, “show the last three years of Grade 3
-                  ELA scores”, or “which of my columns has the widest spread?”
+                  ELA scores”, “make a calculated field averaging ELA and Math proficiency”, or “which
+                  of my columns has the widest spread?”
                 </p>
               )}
               {aiMsgs.map((m, i) => (
