@@ -552,6 +552,32 @@ export function Visualizer({
     });
   }
 
+  // When a bar chart has a field spanning multiple years, those years need to be
+  // laid out — side by side (grouped) or stacked. Offer that as one clear choice.
+  const multiYear = spec.data.fields.some((f) => f.years.length > 1);
+  const barLayout = (() => {
+    const xo = (spec.encoding?.xOffset as Record<string, unknown> | undefined)?.field;
+    const col = (spec.encoding?.color as Record<string, unknown> | undefined)?.field;
+    if (xo === "year") return "grouped";
+    if (col === "year") return "stacked";
+    return "overlapping";
+  })();
+  function setBarLayout(value: string) {
+    setSpec((s) => {
+      const enc = { ...(s.encoding ?? {}) } as Record<string, Record<string, unknown>>;
+      if ((enc.xOffset as Record<string, unknown> | undefined)?.field === "year") delete enc.xOffset;
+      if (value === "grouped") {
+        enc.color = { field: "year", type: "nominal" };
+        enc.xOffset = { field: "year", type: "nominal" };
+      } else if (value === "stacked") {
+        enc.color = { field: "year", type: "nominal" }; // no xOffset → Vega stacks by colour
+      } else if ((enc.color as Record<string, unknown> | undefined)?.field === "year") {
+        delete enc.color;
+      }
+      return { ...s, encoding: enc as ChartSpec["encoding"] };
+    });
+  }
+
   // Highlight the user's own district by colouring on the homeDistrict column.
   const highlightOn = (spec.encoding?.color as Record<string, unknown> | undefined)?.field === "homeDistrict";
   function setHighlight(on: boolean) {
@@ -815,6 +841,19 @@ export function Visualizer({
           <select value={chartType} onChange={(e) => setChartType(e.target.value)} className={input}>
             {MARK_OPTIONS.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
           </select>
+          {chartType === "bar" && multiYear && (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-600 dark:text-slate-300">Multiple years</span>
+              <select value={barLayout} onChange={(e) => setBarLayout(e.target.value)} className={input}>
+                <option value="grouped">Side by side (grouped)</option>
+                <option value="stacked">Stacked</option>
+                <option value="overlapping">Overlapping (not recommended)</option>
+              </select>
+              <span className="text-[11px] text-slate-400">
+                How to lay out the years for each district.
+              </span>
+            </label>
+          )}
 
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fields</p>
           {PRIMARY_CHANNELS.map(({ ch, label, hint }) => {
