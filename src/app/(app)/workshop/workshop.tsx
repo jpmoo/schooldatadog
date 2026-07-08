@@ -217,6 +217,7 @@ export function Workshop({
   const [calcDialog, setCalcDialog] = useState<{ editId: string | null } | null>(null);
   const [ctx, setCtx] = useState<Ctx | null>(null);
   const [dragging, setDragging] = useState<{ kind: string; label: string } | null>(null);
+  const [openCats, setOpenCats] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -224,12 +225,14 @@ export function Workshop({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Re-run search whenever the query OR the selected year changes (the year
+  // restricts the list to metrics that actually have data that year).
   useEffect(() => {
     const t = setTimeout(() => {
-      startSearch(async () => setMetrics(await searchMetrics(query)));
+      startSearch(async () => setMetrics(await searchMetrics(query, year)));
     }, 250);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, year]);
 
   // ── derived data ──
   const visibleEntities = useMemo(
@@ -649,21 +652,54 @@ export function Workshop({
             placeholder="Search metrics (keyword + meaning)…"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {grouped && grouped.length > 0 && (
+            <div className="flex items-center gap-3 text-xs text-slate-400">
+              <button
+                onClick={() => setOpenCats(new Set(grouped.map(([c]) => c)))}
+                className="hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                Expand all
+              </button>
+              <button
+                onClick={() => setOpenCats(new Set())}
+                className="hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                Collapse all
+              </button>
+            </div>
+          )}
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
             {isSearching && <p className="text-xs text-slate-400">Searching…</p>}
             {grouped
-              ? grouped.map(([cat, list]) => (
-                  <div key={cat}>
-                    <p className="sticky top-0 bg-slate-50 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:bg-slate-950">
-                      {cat}
-                    </p>
-                    <div className="space-y-1.5">
-                      {list.map((m) => (
-                        <MetricChip key={m.code} metric={m} />
-                      ))}
+              ? grouped.map(([cat, list]) => {
+                  const open = openCats.has(cat);
+                  return (
+                    <div key={cat}>
+                      <button
+                        onClick={() =>
+                          setOpenCats((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(cat)) n.delete(cat);
+                            else n.add(cat);
+                            return n;
+                          })
+                        }
+                        className="sticky top-0 z-10 flex w-full items-center gap-1.5 bg-slate-50 py-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
+                      >
+                        <span className="text-slate-400">{open ? "▾" : "▸"}</span>
+                        <span className="flex-1">{cat}</span>
+                        <span className="font-normal text-slate-400">{list.length}</span>
+                      </button>
+                      {open && (
+                        <div className="space-y-1.5 py-1">
+                          {list.map((m) => (
+                            <MetricChip key={m.code} metric={m} />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               : metrics.map((m) => <MetricChip key={m.code} metric={m} />)}
             {metrics.length === 0 && !isSearching && (
               <p className="text-sm text-slate-400">No metrics match.</p>

@@ -17,11 +17,11 @@ export default async function WorkshopPage({
   const { view } = await searchParams;
   const viewId = view ? Number(view) : NaN;
 
-  const [years, counties, entities, initialMetrics, groups, saved, me] = await Promise.all([
-    getYears(),
+  const years = await getYears();
+  const [counties, entities, initialMetrics, groups, saved, me] = await Promise.all([
     getCounties(),
     getEntities(),
-    searchMetrics(""),
+    searchMetrics("", years[0]),
     getUserGroups(),
     Number.isInteger(viewId) ? getView(viewId) : Promise.resolve(null),
     db
