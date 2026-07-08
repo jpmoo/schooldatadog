@@ -21,7 +21,7 @@ export default async function ViewsPage() {
           <Link href="/workshop" className="text-indigo-600 hover:underline dark:text-indigo-400">
             Data Workshop
           </Link>{" "}
-          sessions — every filter, sort, and column (including calculated fields), saved to reopen
+          sessions: every filter, sort, and column (including calculated fields), saved to reopen
           in one click.
         </p>
       </div>

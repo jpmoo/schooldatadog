@@ -274,6 +274,28 @@ export const savedCharts = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
+ * Activity log (audit trail: sign-ins, saves, loads)
+ * ------------------------------------------------------------------ */
+
+export const activityLog = pgTable(
+  "activity_log",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+    action: varchar("action", { length: 64 }).notNull(), // e.g. login, view.save, chart.load
+    targetType: varchar("target_type", { length: 32 }), // view | group | visualization
+    targetName: varchar("target_name", { length: 255 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("activity_log_user_idx").on(t.userId),
+    index("activity_log_created_idx").on(t.createdAt),
+  ],
+);
+
+export type ActivityLog = typeof activityLog.$inferSelect;
+
+/* ------------------------------------------------------------------ *
  * App settings (key/value)
  * ------------------------------------------------------------------ */
 

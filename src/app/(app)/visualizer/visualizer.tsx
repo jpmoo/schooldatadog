@@ -33,7 +33,7 @@ const PRIMARY_CHANNELS = [
   { ch: "color", label: "Color by", hint: "A separate color for each value." },
 ] as const;
 const ADVANCED_CHANNELS = [
-  { ch: "xOffset", label: "Side-by-side bars", hint: "Groups each bar into a cluster — e.g. set to Year to show years side by side per district." },
+  { ch: "xOffset", label: "Side-by-side bars", hint: "Groups each bar into a cluster. Set to Year to show years side by side per district." },
   { ch: "column", label: "Small charts across", hint: "One mini-chart per value, left → right." },
   { ch: "row", label: "Small charts down", hint: "One mini-chart per value, top → bottom." },
   { ch: "size", label: "Bubble size", hint: "Bigger mark = bigger value. Best with Dots." },
@@ -908,13 +908,13 @@ export function Visualizer({
               <select value={barLayout} onChange={(e) => setBarLayout(e.target.value)} className={input}>
                 <option value="grouped">Side by side (grouped)</option>
                 <option value="stacked" disabled={!stackable}>
-                  Stacked{stackable ? "" : " — n/a (not an additive measure)"}
+                  Stacked{stackable ? "" : " (n/a: not an additive measure)"}
                 </option>
                 <option value="overlapping">Overlapping (not recommended)</option>
               </select>
               <span className="text-[11px] text-slate-400">
                 How to lay out the years for each district.
-                {!stackable && " Stacking is off for rates/scores — summing years isn’t meaningful."}
+                {!stackable && " Stacking is off for rates and scores; summing years isn’t meaningful."}
               </span>
             </label>
           )}
@@ -962,7 +962,7 @@ export function Visualizer({
                 <label key={ch} className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
                   <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={input}>
-                    <option value="">— none —</option>
+                    <option value="">none</option>
                     {opts.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
                   </select>
                   <span className="text-[11px] text-slate-400">{hint}</span>
@@ -1055,7 +1055,7 @@ export function Visualizer({
               {aiMsgs.length === 0 && (
                 <p className="text-sm text-slate-400">
                   Try “compare 4-year graduation rates for these districts” or “which of these
-                  metrics would show equity gaps best?” — I’ll build the chart and answer questions.
+                  metrics would show equity gaps best?” I’ll build the visualization and answer questions.
                 </p>
               )}
               {aiMsgs.map((m, i) => (

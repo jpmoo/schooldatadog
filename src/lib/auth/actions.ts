@@ -5,6 +5,8 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
+import { requireUser } from "@/lib/auth/guards";
 import { hashPassword, verifyPassword } from "./password";
 import { createSession, destroySession } from "./session";
 
@@ -97,10 +99,13 @@ export async function login(
   }
 
   await createSession(user.id);
+  await logActivity(user.id, "login");
   redirect("/");
 }
 
 export async function logout(): Promise<void> {
+  const me = await requireUser().catch(() => null);
+  if (me) await logActivity(me.id, "logout");
   await destroySession();
   redirect("/login");
 }

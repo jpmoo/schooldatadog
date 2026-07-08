@@ -311,7 +311,7 @@ export function CalcDialog({
               {showWeight && selectedInOrder.length > 0 && (
                 <div className="mt-1 flex items-start justify-between gap-2">
                   <p className="text-xs text-slate-400">
-                    Set each column&apos;s share — adjust them so the total adds up to 100.
+                    Set each column&apos;s share, adjusting them so the total adds up to 100.
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
                     <span
@@ -336,7 +336,7 @@ export function CalcDialog({
 
               {isChange && (
                 <p className="mt-1 text-xs text-slate-400">
-                  Evaluated first → last in the order above — drag the handles to reorder (the sheet
+                  Evaluated first to last in the order above. Drag the handles to reorder (the sheet
                   updates too).
                 </p>
               )}

@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { savedCharts } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { requireUser } from "@/lib/auth/guards";
 import type { ChartSpec } from "@/lib/viz/spec";
 
@@ -38,5 +39,6 @@ export async function getChart(
     .from(savedCharts)
     .where(and(eq(savedCharts.id, id), eq(savedCharts.userId, user.id)))
     .limit(1);
+  if (row) await logActivity(user.id, "chart.load", "visualization", row.name);
   return row ? { id: row.id, name: row.name, spec: row.spec as ChartSpec } : null;
 }

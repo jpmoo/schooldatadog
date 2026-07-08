@@ -5,6 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { savedViews } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { requireUser } from "@/lib/auth/guards";
 import type { SavedViewState } from "@/app/(app)/workshop/columns";
 
@@ -50,6 +51,7 @@ export async function createView(
     .values({ userId: user.id, name: parsed.data, state })
     .returning({ id: savedViews.id, name: savedViews.name });
 
+  await logActivity(user.id, "view.save", "view", row.name);
   revalidatePath("/views");
   return { ok: true, view: row };
 }
@@ -67,6 +69,7 @@ export async function overwriteView(
     .where(and(eq(savedViews.id, id), eq(savedViews.userId, user.id)))
     .returning({ id: savedViews.id, name: savedViews.name });
   if (!row) return { ok: false, error: "View not found." };
+  await logActivity(user.id, "view.save", "view", row.name);
   revalidatePath("/views");
   return { ok: true, view: row };
 }

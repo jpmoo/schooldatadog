@@ -64,7 +64,7 @@ export default async function GroupsPage() {
 
               <details className="mt-3 text-sm">
                 <summary className="cursor-pointer text-slate-500 dark:text-slate-400">
-                  {g.entities.length} {g.entities.length === 1 ? "entity" : "entities"} — preview
+                  {g.entities.length} {g.entities.length === 1 ? "entity" : "entities"} (preview)
                 </summary>
                 <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
                   {g.entities.map((e) => (

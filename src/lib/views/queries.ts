@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { savedViews } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { requireUser } from "@/lib/auth/guards";
 import type { SavedViewState } from "@/app/(app)/workshop/columns";
 
@@ -40,5 +41,6 @@ export async function getView(
     .from(savedViews)
     .where(and(eq(savedViews.id, id), eq(savedViews.userId, user.id)))
     .limit(1);
+  if (row) await logActivity(user.id, "view.load", "view", row.name);
   return row ? { id: row.id, name: row.name, state: row.state as SavedViewState } : null;
 }

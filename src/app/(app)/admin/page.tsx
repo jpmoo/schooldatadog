@@ -12,7 +12,7 @@ const tools: Tool[] = [
   },
   {
     title: "Data Dictionary",
-    body: "Browse and edit metric definitions — descriptions, categories, units, and types.",
+    body: "Browse and edit metric definitions: descriptions, categories, units, and types.",
     href: "/admin/metrics",
   },
   {
@@ -25,6 +25,11 @@ const tools: Tool[] = [
     body: "Create, edit, and remove accounts; set roles and home districts.",
     href: "/admin/users",
   },
+  {
+    title: "Activity Log",
+    body: "Review sign-ins, sign-outs, and saves/loads of views, groups, and visualizations.",
+    href: "/admin/log",
+  },
 ];
 
 export default async function AdminPage() {
@@ -36,10 +41,10 @@ export default async function AdminPage() {
       <div>
         <h1 className="flex items-center gap-2.5 text-2xl font-bold text-slate-900 dark:text-white">
           <Icon name="Settings" className="h-7 w-7 text-indigo-500" />
-          System Settings
+          Administration
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
-          Admin tools for AI, the data dictionary, entities, and users.
+          Admin tools for AI, the data dictionary, entities, users, and the activity log.
         </p>
       </div>
 

@@ -11,13 +11,13 @@ type Tile = { title: string; body: string; href: string; icon?: IconName; adminO
 const toolTiles: Tile[] = [
   {
     title: "Data Workshop",
-    body: "Build comparative spreadsheets — drag in metrics, add calculated fields, and filter.",
+    body: "Build comparative spreadsheets. Drag in metrics, add calculated fields, and filter.",
     href: "/workshop",
     icon: "dataWorkshop",
   },
   {
     title: "Visualizer",
-    body: "Build attractive, exportable charts — bar, line, scatter, heatmap — from any data.",
+    body: "Build attractive, exportable visualizations (bar, line, scatter, heatmap) from any data.",
     href: "/visualizer",
     icon: "visualizer",
   },
@@ -26,7 +26,7 @@ const toolTiles: Tile[] = [
 const savedTiles: Tile[] = [
   {
     title: "Saved Views",
-    body: "Reopen, rename, or delete full workshop sessions — filters, sorts, and calculated fields.",
+    body: "Reopen, rename, or delete full workshop sessions, with filters, sorts, and calculated fields.",
     href: "/views",
     icon: "savedItems",
   },
@@ -38,13 +38,13 @@ const savedTiles: Tile[] = [
   },
   {
     title: "Saved Visualizations",
-    body: "Open, rename, duplicate, or delete the charts you've built in the Visualizer.",
+    body: "Open, rename, duplicate, or delete the visualizations you've built in the Visualizer.",
     href: "/charts",
     icon: "savedItems",
   },
   {
-    title: "System Settings",
-    body: "Admin tools for AI/Ollama, the data dictionary, entities, and user accounts.",
+    title: "Administration",
+    body: "Admin tools for AI/Ollama, the data dictionary, entities, users, and the activity log.",
     href: "/admin",
     icon: "Settings",
     adminOnly: true,

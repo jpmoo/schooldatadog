@@ -27,9 +27,9 @@ export default function RootLayout({
   const basePath = (process.env.BASE_PATH ?? "").trim().replace(/\/+$/, "");
   // One CSS var per icon (mask URL); the <Icon> component references var(--i-<name>).
   const iconNames = [
-    "apply", "calcualtedField", "clear", "dashboard", "dataWorkshop", "delete", "export", "logout",
-    "myDistrictSchools", "open", "rename", "saveViewOrGroup", "savedItems", "Settings", "spec",
-    "showHideEmpty", "showHidePanel", "user", "visualizer",
+    "apply", "calcualtedField", "clear", "dashboard", "dataWorkshop", "delete", "duplicate", "export",
+    "logout", "myDistrictSchools", "no", "open", "rename", "saveViewOrGroup", "savedItems", "Settings",
+    "spec", "showHideEmpty", "showHidePanel", "user", "visualizer",
   ];
   const cssVars = {
     "--brand-logo-src": `url("${basePath}/SchoolDataDog.svg")`,

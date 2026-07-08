@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { savedCharts } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { requireUser } from "@/lib/auth/guards";
 import { parseSpec } from "@/lib/viz/spec";
 
@@ -27,6 +28,7 @@ export async function createChart(name: string, spec: unknown): Promise<SaveChar
     .values({ userId: user.id, name: parsedName.data, spec: parsedSpec })
     .returning({ id: savedCharts.id, name: savedCharts.name });
 
+  await logActivity(user.id, "chart.save", "visualization", row.name);
   revalidatePath("/charts");
   return { ok: true, chart: row };
 }
@@ -52,6 +54,7 @@ export async function updateChart(
     .where(and(eq(savedCharts.id, id), eq(savedCharts.userId, user.id)))
     .returning({ id: savedCharts.id, name: savedCharts.name });
   if (!row) return { ok: false, error: "Chart not found." };
+  await logActivity(user.id, "chart.save", "visualization", row.name);
   revalidatePath("/charts");
   return { ok: true, chart: row };
 }
@@ -89,8 +92,8 @@ export async function duplicateChart(formData: FormData): Promise<void> {
     .where(and(eq(savedCharts.id, id), eq(savedCharts.userId, user.id)))
     .limit(1);
   if (!src) return;
-  await db
-    .insert(savedCharts)
-    .values({ userId: user.id, name: `${src.name} (copy)`.slice(0, 255), spec: src.spec });
+  const copyName = `${src.name} (copy)`.slice(0, 255);
+  await db.insert(savedCharts).values({ userId: user.id, name: copyName, spec: src.spec });
+  await logActivity(user.id, "chart.save", "visualization", copyName);
   revalidatePath("/charts");
 }

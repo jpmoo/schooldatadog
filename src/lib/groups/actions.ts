@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { entities, entityGroups } from "@/db/schema";
+import { logActivity } from "@/lib/activity/log";
 import { requireUser } from "@/lib/auth/guards";
 import type { GroupLite } from "./queries";
 
@@ -62,6 +63,7 @@ export async function createGroup(
     .values({ userId: user.id, name: parsed.data, entityIds: ids })
     .returning({ id: entityGroups.id, name: entityGroups.name, entityIds: entityGroups.entityIds });
 
+  await logActivity(user.id, "group.save", "group", row.name);
   revalidatePath("/groups");
   return { ok: true, group: { id: row.id, name: row.name, entityIds: row.entityIds ?? [] } };
 }
@@ -80,6 +82,7 @@ export async function overwriteGroup(
     .where(and(eq(entityGroups.id, id), eq(entityGroups.userId, user.id)))
     .returning({ id: entityGroups.id, name: entityGroups.name, entityIds: entityGroups.entityIds });
   if (!row) return { ok: false, error: "Group not found." };
+  await logActivity(user.id, "group.save", "group", row.name);
   revalidatePath("/groups");
   return { ok: true, group: { id: row.id, name: row.name, entityIds: row.entityIds ?? [] } };
 }
