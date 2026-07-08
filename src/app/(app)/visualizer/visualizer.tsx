@@ -573,9 +573,22 @@ export function Visualizer({
         }
         delete enc.y;
       }
+      // Outline highlight doesn't work on line/area/tick — drop it if switching there.
+      if (value === "line" || value === "area" || value === "tick") {
+        for (const k of ["stroke", "strokeWidth"]) {
+          const c = (enc[k] as Record<string, unknown> | undefined)?.condition as
+            | Record<string, unknown>
+            | undefined;
+          if (typeof c?.test === "string" && c.test.includes("homeDistrict")) delete enc[k];
+        }
+      }
       return { ...s, mark: value, encoding: enc as ChartSpec["encoding"] };
     });
   }
+  // Outline emphasis needs a mark with a separate fill + border.
+  const outlineOk = ["bar", "point", "rect"].includes(
+    typeof spec.mark === "string" ? spec.mark : "bar",
+  );
 
   // When a bar chart has a field spanning multiple years, those years need to be
   // laid out — side by side (grouped) or stacked. Offer that as one clear choice.
@@ -1010,7 +1023,9 @@ export function Visualizer({
                 <select value={highlightMode} onChange={(e) => setHighlightMode(e.target.value)} className={`${input} flex-1`}>
                   <option value="none">None</option>
                   <option value="fade">Fade the others</option>
-                  <option value="outline">Outline it</option>
+                  <option value="outline" disabled={!outlineOk}>
+                    Outline it{outlineOk ? "" : " (n/a for this type)"}
+                  </option>
                   <option value="color">Recolor it</option>
                 </select>
                 {highlightMode === "color" && (

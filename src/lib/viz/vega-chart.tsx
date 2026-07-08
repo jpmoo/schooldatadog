@@ -129,23 +129,43 @@ function toVegaLite(
     }),
   );
 
-  // Histogram highlight: on an aggregated (binned + count) bar a per-datum
-  // highlight can't work, so colour the whole bin that contains the home
-  // district by max(isHome). Replaces the datum-condition highlight here.
-  const extraTransform: Record<string, unknown>[] = [];
+  // The default fill for un-highlighted marks — the theme's primary colour, so a
+  // "recolour" highlight leaves everyone else looking normal (not faded/grey).
+  const themePrimary = spec.theme === "print" ? "#0f172a" : "#6366f1";
+  const markStr = typeof spec.mark === "string" ? spec.mark : "bar";
+  const hasHomeCond = (o: unknown) => {
+    const c = (o as Record<string, unknown> | undefined)?.condition as Record<string, unknown> | undefined;
+    return typeof c?.test === "string" && c.test.includes("homeDistrict");
+  };
+  const e = encoding as Record<string, unknown>;
   const xd = (enc.x ?? {}) as Record<string, unknown>;
   const yd = (enc.y ?? {}) as Record<string, unknown>;
-  const isHistogram = spec.mark === "bar" && "bin" in xd && yd.aggregate === "count";
-  const hlActive = ["opacity", "stroke", "color"].some((k) => {
-    const c = ((enc[k] ?? {}) as Record<string, unknown>).condition as Record<string, unknown> | undefined;
-    return typeof c?.test === "string" && c.test.includes("homeDistrict");
-  });
+  const isHistogram = markStr === "bar" && "bin" in xd && yd.aggregate === "count";
+
+  // Outline (stroke) highlight is meaningless on line/area/tick marks (stroke is
+  // the mark itself), so drop it there rather than render invisible lines.
+  if (markStr === "line" || markStr === "area" || markStr === "tick") {
+    if (hasHomeCond(e.stroke)) delete e.stroke;
+    if (hasHomeCond(e.strokeWidth)) delete e.strokeWidth;
+  }
+
+  // A "recolour" highlight (colour condition with a plain value, no field) should
+  // leave the other marks in the normal colour, not a placeholder grey.
+  const colorDef = e.color as Record<string, unknown> | undefined;
+  if (!isHistogram && hasHomeCond(colorDef) && typeof colorDef?.field !== "string") {
+    e.color = { ...colorDef, value: themePrimary };
+  }
+
+  // Histogram highlight: on an aggregated (binned + count) bar a per-datum
+  // highlight can't work, so colour the whole bin that contains the home
+  // district by max(isHome). Others keep the normal colour.
+  const extraTransform: Record<string, unknown>[] = [];
+  const hlActive = ["opacity", "stroke", "color"].some((k) => hasHomeCond(enc[k]));
   if (isHistogram && hlActive) {
     const colorCond = ((enc.color ?? {}) as Record<string, unknown>).condition as
       | Record<string, unknown>
       | undefined;
     const hlColor = typeof colorCond?.value === "string" ? colorCond.value : "#f59e0b";
-    const e = encoding as Record<string, unknown>;
     delete e.opacity;
     delete e.stroke;
     delete e.strokeWidth;
@@ -153,7 +173,7 @@ function toVegaLite(
       aggregate: "max",
       field: "_home",
       type: "ordinal",
-      scale: { domain: [0, 1], range: ["#94a3b8", hlColor] },
+      scale: { domain: [0, 1], range: [themePrimary, hlColor] },
       legend: null,
     };
     extraTransform.push({ calculate: "datum.homeDistrict === 'My district' ? 1 : 0", as: "_home" });
