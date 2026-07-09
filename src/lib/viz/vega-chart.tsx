@@ -89,10 +89,6 @@ function toVegaLite(
     }
   }
 
-  // When the entities come from a saved group/view, that name is the default
-  // title for whatever axis/legend shows the entities (a custom title still wins).
-  const entitySourceName = spec.data.entities.source?.name;
-
   const encoding = Object.fromEntries(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
@@ -109,12 +105,8 @@ function toVegaLite(
       delete rest.axisMin;
       delete rest.axisMax;
       delete rest.interval;
-      // Precedence: an explicit user title wins; otherwise a saved group/view's
-      // name titles the entity channel; otherwise the friendly field name.
-      const title =
-        (typeof d.title === "string" ? d.title : undefined) ??
-        (d.field === "entityName" ? entitySourceName : undefined) ??
-        friendly;
+      // An explicit user title wins; otherwise the friendly field name.
+      const title = (typeof d.title === "string" ? d.title : undefined) ?? friendly;
 
       const meta = axisMeta[ch];
       let axis = (rest.axis && typeof rest.axis === "object" ? { ...(rest.axis as object) } : undefined) as

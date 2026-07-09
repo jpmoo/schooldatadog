@@ -1103,14 +1103,7 @@ export function Visualizer({
             const isAxis = ch === "x" || ch === "y";
             const selectValue = def?.field ?? (isAxis ? "__count__" : "");
             const showTitle = !!def?.field || isAxis;
-            // Mirror the chart's default: a saved group/view names the entity
-            // channel; otherwise the friendly field name, or "Count" for an empty axis.
-            const defaultLabel =
-              def?.field === "entityName" && provenance?.name
-                ? provenance.name
-                : def?.field
-                  ? (axisLabels[def.field] ?? def.field)
-                  : "Count";
+            const defaultLabel = def?.field ? (axisLabels[def.field] ?? def.field) : "Count";
             return (
               <label key={ch} className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
