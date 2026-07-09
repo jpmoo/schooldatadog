@@ -66,6 +66,12 @@ export async function streamAiChat(
   }
 
   const [content, statsPart] = raw.split(STATS_SEP);
+  // A 200 with an empty body usually means a reverse proxy didn't forward the
+  // stream. Signal failure so the caller falls back to the non-streaming action
+  // (which returns the whole body in one response and isn't affected by this).
+  if (!content.trim()) {
+    return { ok: false, error: "Scout returned an empty streamed response." };
+  }
   const parsed = extractJson(content);
   const reply =
     parsed && typeof parsed.reply === "string"
