@@ -116,6 +116,14 @@ function toVegaLite(
         | Record<string, unknown>
         | undefined;
       if (meta) {
+        // Vega-Lite includes zero on quantitative scales by default, which stretches
+        // a line/scatter/point axis down to 0 even when the data sits far above it
+        // (e.g. values 438–500 rendered from 0). Opt out so these marks use the data
+        // range; bar/area still anchor at 0 (zeroBased).
+        if (!zeroBased) {
+          scale = scale ?? {};
+          if (scale.zero === undefined) scale.zero = false;
+        }
         // Domain — ignore an inverted (min ≥ max) range, which Vega rejects.
         const inverted = meta.dMin !== undefined && meta.dMax !== undefined && meta.dMin >= meta.dMax;
         if (!inverted && (meta.dMin !== undefined || meta.dMax !== undefined)) {
