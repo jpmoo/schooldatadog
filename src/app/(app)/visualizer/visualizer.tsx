@@ -394,6 +394,8 @@ export function Visualizer({
   const [pendingChart, setPendingChart] = useState<{ chart: unknown; text: string } | null>(null);
   // Last AI turn's speed, shown in the panel to gauge model latency.
   const [aiStats, setAiStats] = useState<{ seconds: number; tokens?: number; tokensPerSec?: number } | null>(null);
+  // Aborts the in-flight AI request (the "Stop" button).
+  const aiAbortRef = useRef<AbortController | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   useEffect(() => {
     aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
@@ -495,6 +497,8 @@ export function Visualizer({
     setAiInput("");
     setAiBusy(true);
     const started = performance.now();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
 
     let reply = "";
     let command: unknown = null;
@@ -502,7 +506,14 @@ export function Visualizer({
       "visualizer",
       { messages: history, state: spec, catalog: aiCatalog() },
       (partial) => partial && setLastAssistant(partial),
+      controller.signal,
     );
+    if (controller.signal.aborted) {
+      aiAbortRef.current = null;
+      setAiBusy(false);
+      setLastAssistant("Interrupted.");
+      return;
+    }
     if (streamed.ok) {
       reply = (streamed.reply ?? "").trim();
       command = streamed.command;
@@ -510,6 +521,7 @@ export function Visualizer({
       // Streaming unavailable — fall back to the non-streaming action.
       const res = await visualizerChat(history, spec, aiCatalog());
       if (!res.ok) {
+        aiAbortRef.current = null;
         setAiBusy(false);
         setLastAssistant(res.error, true);
         return;
@@ -517,6 +529,7 @@ export function Visualizer({
       reply = (res.reply ?? "").trim();
       command = res.chart;
     }
+    aiAbortRef.current = null;
     setAiBusy(false);
     const t = streamed.ok ? streamed.timings : null;
     setAiStats({ seconds: (performance.now() - started) / 1000, tokens: t?.tokens, tokensPerSec: t?.tokensPerSec });
@@ -529,6 +542,10 @@ export function Visualizer({
     } else {
       setLastAssistant(reply || "(done)");
     }
+  }
+  // "Stop" — cancel the in-flight request (also disconnects Ollama via the route).
+  function stopAi() {
+    aiAbortRef.current?.abort();
   }
   // "Yes" on the apply challenge — carry out the AI's proposed change.
   function confirmChartChange() {
@@ -1530,13 +1547,22 @@ export function Visualizer({
                 placeholder="Tell the AI what to chart, or ask about the data…"
                 className={`${input} flex-1`}
               />
-              <button
-                onClick={() => void sendAi()}
-                disabled={aiBusy || !aiInput.trim()}
-                className="rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
-              >
-                Send
-              </button>
+              {aiBusy ? (
+                <button
+                  onClick={stopAi}
+                  className="rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-500"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={() => void sendAi()}
+                  disabled={!aiInput.trim()}
+                  className="rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
+                >
+                  Send
+                </button>
+              )}
             </div>
           </div>
         )}

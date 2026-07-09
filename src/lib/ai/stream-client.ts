@@ -30,6 +30,7 @@ export async function streamAiChat(
   kind: "worksheet" | "visualizer",
   payload: { messages: unknown; state: unknown; catalog: unknown },
   onReply: (partialReply: string) => void,
+  signal?: AbortSignal,
 ): Promise<StreamAiResult> {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   // Once the model starts emitting the structured command, show a status instead
@@ -42,6 +43,7 @@ export async function streamAiChat(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ kind, ...payload }),
+      signal,
     });
     if (!res.ok || !res.body) {
       return { ok: false, error: `The AI server returned HTTP ${res.status}.` };

@@ -312,6 +312,8 @@ export function Workshop({
   const [pendingSheet, setPendingSheet] = useState<{ sheet: unknown; reply: string } | null>(null);
   // Last AI turn's speed, shown in the panel to gauge model latency.
   const [aiStats, setAiStats] = useState<{ seconds: number; tokens?: number; tokensPerSec?: number } | null>(null);
+  // Aborts the in-flight AI request (the "Stop" button).
+  const aiAbortRef = useRef<AbortController | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   const metricByCode = useMemo(() => new Map(initialMetrics.map((m) => [m.code, m])), [initialMetrics]);
   useEffect(() => {
@@ -537,6 +539,8 @@ export function Workshop({
     setAiBusy(true);
     const started = performance.now();
     const { state, catalog } = aiRequestContext();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
 
     let reply = "";
     let command: unknown = null;
@@ -544,7 +548,14 @@ export function Workshop({
       "worksheet",
       { messages: history, state, catalog },
       (partial) => partial && setLastAssistant(partial),
+      controller.signal,
     );
+    if (controller.signal.aborted) {
+      aiAbortRef.current = null;
+      setAiBusy(false);
+      setLastAssistant("Interrupted.");
+      return;
+    }
     if (streamed.ok) {
       reply = (streamed.reply ?? "").trim();
       command = streamed.command;
@@ -552,6 +563,7 @@ export function Workshop({
       // Streaming unavailable — fall back to the non-streaming action.
       const res = await worksheetChat(history, state, catalog);
       if (!res.ok) {
+        aiAbortRef.current = null;
         setAiBusy(false);
         setLastAssistant(res.error, true);
         return;
@@ -559,6 +571,7 @@ export function Workshop({
       reply = (res.reply ?? "").trim();
       command = res.sheet;
     }
+    aiAbortRef.current = null;
     setAiBusy(false);
     const t = streamed.ok ? streamed.timings : null;
     setAiStats({ seconds: (performance.now() - started) / 1000, tokens: t?.tokens, tokensPerSec: t?.tokensPerSec });
@@ -571,6 +584,10 @@ export function Workshop({
     } else {
       setLastAssistant(reply || "(done)");
     }
+  }
+  // "Stop" — cancel the in-flight request (also disconnects Ollama via the route).
+  function stopAi() {
+    aiAbortRef.current?.abort();
   }
   // "Yes" on the apply challenge — carry out the AI's proposed change.
   function confirmSheetChange() {
@@ -1691,13 +1708,22 @@ export function Workshop({
                 placeholder="Tell the AI what to put in the table, or ask about the data…"
                 className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
-              <button
-                onClick={() => void sendAi()}
-                disabled={aiBusy || !aiInput.trim()}
-                className="rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
-              >
-                Send
-              </button>
+              {aiBusy ? (
+                <button
+                  onClick={stopAi}
+                  className="rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-500"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={() => void sendAi()}
+                  disabled={!aiInput.trim()}
+                  className="rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
+                >
+                  Send
+                </button>
+              )}
             </div>
           </div>
         )}
