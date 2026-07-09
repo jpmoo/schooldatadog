@@ -136,6 +136,7 @@ export function Visualizer({
   const [resolving, setResolving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [moveDialog, setMoveDialog] = useState(false);
+  const [showClear, setShowClear] = useState(false);
   const router = useRouter();
   const [showJson, setShowJson] = useState(false);
   const [jsonText, setJsonText] = useState("");
@@ -593,6 +594,23 @@ export function Visualizer({
         : "No problem — tell me what you'd like to do instead.";
     setLastAssistant(content);
     scrollMsgToTop(turnStart);
+  }
+
+  // "Clear" — wipe the chart and the Scout conversation back to a blank canvas.
+  function clearAll() {
+    setShowClear(false);
+    setSpec(blankSpec());
+    setName("");
+    setChartId(null);
+    setRows([]);
+    setShowJson(false);
+    setSaveMsg(null);
+    setPendingChart(null);
+    setAiStats(null);
+    setAiMsgs([]);
+    setEntType("districts");
+    setEntScope("district");
+    setCounty("");
   }
 
   // A fresh chart starts on "Districts only" — populate that set once on mount.
@@ -1063,6 +1081,13 @@ export function Visualizer({
             { label: "PNG", onClick: () => exportImage("png") },
           ]}
         />
+        <button
+          onClick={() => setShowClear(true)}
+          className={`${iconBtn} text-slate-500 hover:text-red-600`}
+          title="Clear the chart and Scout conversation (start fresh)"
+        >
+          <Icon name="clear" />
+        </button>
         {saveMsg && <span className="text-sm text-slate-500 dark:text-slate-400">{saveMsg}</span>}
       </div>
 
@@ -1607,6 +1632,18 @@ export function Visualizer({
           cancelLabel="No"
           onConfirm={confirmChartChange}
           onCancel={declineChartChange}
+        />
+      )}
+
+      {showClear && (
+        <YesNoDialog
+          title="Clear everything?"
+          body="This wipes the current visualization and the whole Scout conversation, leaving a blank canvas. Anything unsaved is lost. Continue?"
+          confirmLabel="Yes, clear"
+          cancelLabel="No"
+          confirmIcon="clear"
+          onConfirm={clearAll}
+          onCancel={() => setShowClear(false)}
         />
       )}
 

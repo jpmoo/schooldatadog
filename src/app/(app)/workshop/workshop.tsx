@@ -1104,7 +1104,8 @@ export function Workshop({
     setColumns(cols);
     void fetchColumnValues(cols.filter((c): c is DataColumn => c.kind === "data"));
   }
-  // Reset the sheet back to a blank slate (columns, filters, sorts, selection).
+  // Reset the sheet back to a blank slate (columns, filters, sorts, selection),
+  // and wipe the Scout conversation too — a full clean slate.
   function clearWorkshop() {
     setColumns([]);
     setLoading(new Set());
@@ -1118,6 +1119,10 @@ export function Workshop({
     setViewMode("districts");
     setHideEmpty(false);
     setViewName(null);
+    setAiMsgs([]);
+    setAiInput("");
+    setPendingSheet(null);
+    setAiStats(null);
     setConfirmClear(false);
   }
   // Export the currently-displayed sheet (rank + name + every column).
@@ -1437,9 +1442,9 @@ export function Workshop({
             </button>
             <button
               onClick={() => setConfirmClear(true)}
-              disabled={columns.length === 0 && districtSort.length === 0 && schoolSort.length === 0 && hidden.size === 0 && !county && !groupFilter}
+              disabled={columns.length === 0 && districtSort.length === 0 && schoolSort.length === 0 && hidden.size === 0 && !county && !groupFilter && aiMsgs.length === 0}
               className={iconBtn}
-              title="Clear all columns, filters, and sorts"
+              title="Clear the table, filters, and the Scout conversation (start fresh)"
             >
               <Icon name="clear" />
             </button>
@@ -1843,7 +1848,7 @@ export function Workshop({
       {confirmClear && (
         <ConfirmDialog
           title="Clear the workshop?"
-          body="This removes all columns, calculated fields, filters, and sorts and returns to a blank sheet. Saved views and groups are not affected."
+          body="This removes all columns, calculated fields, filters, and sorts, and clears the Scout conversation — returning to a blank sheet. Saved views and groups are not affected."
           confirmLabel="Clear"
           onConfirm={clearWorkshop}
           onClose={() => setConfirmClear(false)}
