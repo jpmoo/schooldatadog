@@ -200,8 +200,20 @@ export async function worksheetChat(
       cache: "no-store",
     });
     if (!res.ok) return { ok: false, error: `Scout's server returned HTTP ${res.status}.` };
-    const data = (await res.json()) as { message?: { content?: string } };
+    const data = (await res.json()) as {
+      message?: { content?: string; thinking?: string };
+      done_reason?: string;
+      prompt_eval_count?: number;
+      eval_count?: number;
+    };
     const content = data?.message?.content ?? "";
+    // Diagnostic: shows exactly what Ollama returned for the real request —
+    // prompt size, tokens generated, why it stopped, and the raw content.
+    console.error(
+      `[scout] worksheet done=${data.done_reason} prompt_tokens=${data.prompt_eval_count} ` +
+        `gen_tokens=${data.eval_count} think_len=${(data.message?.thinking ?? "").length} ` +
+        `content=${JSON.stringify(content).slice(0, 400)}`,
+    );
     const parsed = extractJson(content);
     if (parsed) {
       return { ok: true, reply: typeof parsed.reply === "string" ? parsed.reply : "", sheet: parsed.sheet ?? null };
