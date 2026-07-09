@@ -41,7 +41,10 @@ function extractJson(text: string): { reply?: unknown; chart?: unknown } | null 
   }
 }
 
-function systemPrompt(catalog: VizCatalog, currentSpec: unknown): string {
+// Kept free of per-turn state (entity list, chart JSON) so it stays identical
+// across a conversation and the Ollama server can reuse the cached prompt prefix
+// (the big metric catalog) instead of re-evaluating it every turn.
+function systemPrompt(catalog: VizCatalog): string {
   const byCat = new Map<string, string[]>();
   for (const m of catalog.metrics) {
     const cat = m.category ?? "Other";
@@ -70,21 +73,14 @@ ${catalog.groups.length ? catalog.groups.join(", ") : "(none)"}
 # The user's home district
 ${catalog.homeDistrict ? `${catalog.homeDistrict} — when the user says "my district", they mean this one.` : "(not set — if the user references their district and you don't know it, ask.)"}
 
-# Entities currently on the chart
-${
-  catalog.selectedEntities && catalog.selectedEntities.length
-    ? `${catalog.selectedEntities.length} already selected: ${catalog.selectedEntities.slice(0, 80).join(", ")}${catalog.selectedEntities.length > 80 ? `, …(+${catalog.selectedEntities.length - 80} more)` : ""}.
-IMPORTANT: The user deliberately chose these (often by importing a view). ALWAYS use "entities":"keep" so the chart is built from EXACTLY this set. Do NOT switch to "districts"/"schools"/"both" (all entities) unless the user explicitly says "all districts", "every school", "statewide", etc. A histogram/count over "these districts" means a count over THIS selected set, not the whole state.`
-    : "(none selected yet — pick an appropriate set for what the user asks)"
-}
-
-# The current chart (JSON)
-${JSON.stringify(currentSpec)}
+The entities currently on the chart and the current chart JSON are provided in a separate message.
+If the user already has a selection, ALWAYS use "entities":"keep" so the chart is built from EXACTLY that set (they often chose it deliberately, e.g. by importing a view). Do NOT switch to "districts"/"schools"/"both" (all entities) unless the user explicitly says "all districts", "every school", "statewide", etc. A histogram/count over "these districts" means a count over the SELECTED set, not the whole state.
 
 ## How to respond
 Reply with a single JSON object: { "reply": string, "chart": <chart or null> }.
 - "reply": a short, friendly message to the user (answer questions, give advice, explain what you changed, suggest other data that EXISTS, or suggest a better framing).
 - "chart": include this ONLY when the user wants you to build or change the chart; otherwise null.
+- If the request is ambiguous — several metrics could match (e.g. "cost per pupil" when multiple cost metrics exist), or a term like "special education" might mean the "Students with Disabilities" subgroup but you aren't sure — ASK a short clarifying question in "reply" and set "chart" to null instead of guessing. The conversation continues, so you'll get their answer next turn.
 
 A "chart" object looks like:
 {
@@ -177,6 +173,14 @@ export async function visualizerChat(
       : recent;
   }
 
+  // Volatile per-turn state (entity selection + current chart) goes in its own
+  // message so the catalog-heavy system prompt stays cacheable across turns.
+  const sel = catalog.selectedEntities ?? [];
+  const entityLine = sel.length
+    ? `${sel.length} selected: ${sel.slice(0, 80).join(", ")}${sel.length > 80 ? `, …(+${sel.length - 80} more)` : ""}`
+    : "(none selected yet)";
+  const stateMsg = `# Entities currently on the chart\n${entityLine}\n\n# The current chart (JSON)\n${JSON.stringify(currentSpec)}`;
+
   // No client-side timeout — a local model can legitimately take minutes to
   // think, especially for open-ended questions. Let it run to completion.
   try {
@@ -189,7 +193,11 @@ export async function visualizerChat(
         format: "json",
         options: { temperature: 0.2 },
         keep_alive: OLLAMA_KEEP_ALIVE,
-        messages: [{ role: "system", content: systemPrompt(catalog, currentSpec) }, ...history],
+        messages: [
+          { role: "system", content: systemPrompt(catalog) },
+          { role: "system", content: stateMsg },
+          ...history,
+        ],
       }),
       cache: "no-store",
     });

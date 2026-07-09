@@ -6,6 +6,7 @@ import type { View } from "vega";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
+import { YesNoDialog } from "@/components/yes-no-dialog";
 import {
   ALL_STUDENTS,
   type CalcColumn,
@@ -386,6 +387,8 @@ export function Visualizer({
   const [aiInput, setAiInput] = useState("");
   const [aiMsgs, setAiMsgs] = useState<(ChatMessage & { error?: boolean })[]>(initialChat);
   const [aiBusy, setAiBusy] = useState(false);
+  // A proposed AI chart change awaiting the user's OK (edit/replace guard).
+  const [pendingChart, setPendingChart] = useState<{ chart: unknown; text: string } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   useEffect(() => {
     aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
@@ -457,14 +460,9 @@ export function Visualizer({
     };
   }
 
-  async function sendAi() {
-    const text = aiInput.trim();
-    if (!text || aiBusy) return;
-    const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
-    setAiMsgs((m) => [...m, { role: "user", content: text }]);
-    setAiInput("");
-    setAiBusy(true);
-    const res = await visualizerChat(history, spec, {
+  // The catalog the AI needs, built from the live chart/entity state.
+  function aiCatalog() {
+    return {
       metrics: initialMetrics.map((m) => ({ code: m.code, name: m.name, category: m.category ?? null })),
       years,
       subgroups: STD_SUBGROUPS,
@@ -473,23 +471,60 @@ export function Visualizer({
       selectedEntities: spec.data.entities.ids
         .map((id) => entitiesById.get(id)?.name)
         .filter((n): n is string => !!n),
-    });
+    };
+  }
+
+  async function sendAi() {
+    const text = aiInput.trim();
+    if (!text || aiBusy) return;
+    const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
+    setAiMsgs((m) => [...m, { role: "user", content: text }]);
+    setAiInput("");
+    setAiBusy(true);
+    const res = await visualizerChat(history, spec, aiCatalog());
     setAiBusy(false);
     if (res.ok) {
       const reply = (res.reply ?? "").trim();
-      // Never surface raw JSON in the chat — if the model is building a chart and
-      // didn't give a clean prose note, show a friendly status instead.
-      const looksJson = /^[[{]/.test(reply) || reply.includes('"encoding"') || reply.includes('"fields"');
-      const content = res.chart
-        ? !reply || looksJson
-          ? "Building visualization…"
-          : reply
-        : reply || "(done)";
-      setAiMsgs((m) => [...m, { role: "assistant", content }]);
-      if (res.chart) applyAiChart(res.chart, text);
+      if (res.chart) {
+        // Don't change the chart yet — show what the AI proposes and ask first.
+        const looksJson = /^[[{]/.test(reply) || reply.includes('"encoding"') || reply.includes('"fields"');
+        setAiMsgs((m) => [
+          ...m,
+          { role: "assistant", content: !reply || looksJson ? "I've prepared an update to your visualization." : reply },
+        ]);
+        setPendingChart({ chart: res.chart, text });
+      } else {
+        setAiMsgs((m) => [...m, { role: "assistant", content: reply || "(done)" }]);
+      }
     } else {
       setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
     }
+  }
+  // "Yes" on the apply challenge — carry out the AI's proposed change.
+  function confirmChartChange() {
+    const pending = pendingChart;
+    setPendingChart(null);
+    if (pending) applyAiChart(pending.chart, pending.text);
+  }
+  // "No" — discard the change and let the AI acknowledge politely.
+  async function declineChartChange() {
+    setPendingChart(null);
+    const history: ChatMessage[] = [
+      ...aiMsgs.map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content:
+          "I've decided not to apply that change to my visualization. Please respond briefly and politely, and offer to help another way. Do not change the chart.",
+      },
+    ];
+    setAiBusy(true);
+    const res = await visualizerChat(history, spec, aiCatalog());
+    setAiBusy(false);
+    const content =
+      res.ok && (res.reply ?? "").trim()
+        ? (res.reply as string).trim()
+        : "No problem — tell me what you'd like to do instead.";
+    setAiMsgs((m) => [...m, { role: "assistant", content }]);
   }
 
   // A fresh chart starts on "Districts only" — populate that set once on mount.
@@ -1471,6 +1506,17 @@ export function Visualizer({
           </div>
         )}
       </div>
+
+      {pendingChart && (
+        <YesNoDialog
+          title="Apply this change?"
+          body="This will edit or even replace your current visualization. Is that OK?"
+          confirmLabel="Yes, apply"
+          cancelLabel="No"
+          onConfirm={confirmChartChange}
+          onCancel={declineChartChange}
+        />
+      )}
 
       {moveDialog && (
         <MoveDialog

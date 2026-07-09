@@ -39,7 +39,11 @@ function extractJson(text: string): { reply?: unknown; sheet?: unknown } | null 
   }
 }
 
-function systemPrompt(catalog: SheetCatalog, currentState: unknown): string {
+// The system prompt is intentionally free of any per-turn state so it stays
+// byte-identical across a conversation — that lets the Ollama server reuse the
+// cached prompt prefix (the large metric catalog) instead of re-evaluating it
+// every turn. The volatile current-table JSON is sent as a separate message.
+function systemPrompt(catalog: SheetCatalog): string {
   const byCat = new Map<string, string[]>();
   for (const m of catalog.metrics) {
     const cat = m.category ?? "Other";
@@ -69,13 +73,13 @@ ${catalog.counties.join(", ")}
 # The user's home district
 ${catalog.homeDistrict ? `${catalog.homeDistrict} — "my district" means this one.` : "(not set)"}
 
-# The current table (JSON)
-${JSON.stringify(currentState)}
+The current table (JSON) is provided in a separate message.
 
 ## How to respond
 Reply with a single JSON object: { "reply": string, "sheet": <sheet or null> }.
 - "reply": a short, friendly message (answer questions, explain what you changed, suggest other data that EXISTS).
 - "sheet": include ONLY when the user wants to change the table; otherwise null.
+- If the request is ambiguous — several metrics could match (e.g. "cost per pupil" when multiple cost metrics exist), or a term like "special education" might mean the "Students with Disabilities" subgroup but you aren't sure — ASK a short clarifying question in "reply" and set "sheet" to null instead of guessing. The conversation continues, so you'll get their answer next turn.
 
 A "sheet" object looks like:
 {
@@ -187,7 +191,11 @@ export async function worksheetChat(
         format: "json",
         options: { temperature: 0.2 },
         keep_alive: OLLAMA_KEEP_ALIVE,
-        messages: [{ role: "system", content: systemPrompt(catalog, currentState) }, ...history],
+        messages: [
+          { role: "system", content: systemPrompt(catalog) },
+          { role: "system", content: `# The current table (JSON)\n${JSON.stringify(currentState)}` },
+          ...history,
+        ],
       }),
       cache: "no-store",
     });

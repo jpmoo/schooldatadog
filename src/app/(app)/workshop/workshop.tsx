@@ -16,6 +16,7 @@ import {
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
+import { YesNoDialog } from "@/components/yes-no-dialog";
 import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
@@ -304,6 +305,8 @@ export function Workshop({
   const [aiInput, setAiInput] = useState("");
   const [aiMsgs, setAiMsgs] = useState<(ChatMessage & { error?: boolean })[]>([]);
   const [aiBusy, setAiBusy] = useState(false);
+  // A proposed AI sheet change awaiting the user's OK (edit/replace guard).
+  const [pendingSheet, setPendingSheet] = useState<{ sheet: unknown; reply: string } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   const metricByCode = useMemo(() => new Map(initialMetrics.map((m) => [m.code, m])), [initialMetrics]);
   useEffect(() => {
@@ -479,13 +482,8 @@ export function Workshop({
     }
   }
 
-  async function sendAi() {
-    const text = aiInput.trim();
-    if (!text || aiBusy) return;
-    const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
-    setAiMsgs((m) => [...m, { role: "user", content: text }]);
-    setAiInput("");
-    setAiBusy(true);
+  // The sheet + catalog the AI needs, built from the live workshop state.
+  function aiRequestContext() {
     // Give each existing data column a stable handle so the AI can reference it
     // (and any calc field's sources) when it re-emits the full sheet.
     const handleOf = new Map<string, string>();
@@ -506,24 +504,70 @@ export function Workshop({
           asPercent: c.asPercent,
         })),
     };
-    const res = await worksheetChat(history, state, {
+    const catalog = {
       metrics: initialMetrics.map((m) => ({ code: m.code, name: m.name, category: m.category ?? null })),
       years,
       subgroups: AI_SUBGROUPS,
       groups: groups.map((g) => g.name),
       counties,
       homeDistrict: homeDistrictId != null ? (entities.find((e) => e.id === homeDistrictId)?.name ?? null) : null,
-    });
+    };
+    return { state, catalog };
+  }
+
+  async function sendAi() {
+    const text = aiInput.trim();
+    if (!text || aiBusy) return;
+    const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
+    setAiMsgs((m) => [...m, { role: "user", content: text }]);
+    setAiInput("");
+    setAiBusy(true);
+    const { state, catalog } = aiRequestContext();
+    const res = await worksheetChat(history, state, catalog);
     setAiBusy(false);
     if (res.ok) {
       const reply = (res.reply ?? "").trim();
-      const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
-      const content = res.sheet ? (!reply || looksJson ? "Updating the table…" : reply) : reply || "(done)";
-      setAiMsgs((m) => [...m, { role: "assistant", content }]);
-      if (res.sheet) void applyAiSheet(res.sheet, reply);
+      if (res.sheet) {
+        // Don't touch the table yet — show what the AI proposes and ask first.
+        const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
+        setAiMsgs((m) => [
+          ...m,
+          { role: "assistant", content: !reply || looksJson ? "I've prepared an update to your table." : reply },
+        ]);
+        setPendingSheet({ sheet: res.sheet, reply });
+      } else {
+        setAiMsgs((m) => [...m, { role: "assistant", content: reply || "(done)" }]);
+      }
     } else {
       setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
     }
+  }
+  // "Yes" on the apply challenge — carry out the AI's proposed change.
+  function confirmSheetChange() {
+    const pending = pendingSheet;
+    setPendingSheet(null);
+    if (pending) void applyAiSheet(pending.sheet, pending.reply);
+  }
+  // "No" — discard the change and let the AI acknowledge politely.
+  async function declineSheetChange() {
+    setPendingSheet(null);
+    const history: ChatMessage[] = [
+      ...aiMsgs.map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content:
+          "I've decided not to apply that change to my worksheet. Please respond briefly and politely, and offer to help another way. Do not change the table.",
+      },
+    ];
+    setAiBusy(true);
+    const { state, catalog } = aiRequestContext();
+    const res = await worksheetChat(history, state, catalog);
+    setAiBusy(false);
+    const content =
+      res.ok && (res.reply ?? "").trim()
+        ? (res.reply as string).trim()
+        : "No problem — tell me what you'd like to do instead.";
+    setAiMsgs((m) => [...m, { role: "assistant", content }]);
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -1737,6 +1781,17 @@ export function Workshop({
           onOverwrite={() => resolveGroupConflict("overwrite")}
           onSaveNew={() => resolveGroupConflict("new")}
           onClose={() => setGroupConflict(null)}
+        />
+      )}
+
+      {pendingSheet && (
+        <YesNoDialog
+          title="Apply this change?"
+          body="This will edit or even replace your current worksheet. Is that OK?"
+          confirmLabel="Yes, apply"
+          cancelLabel="No"
+          onConfirm={confirmSheetChange}
+          onCancel={declineSheetChange}
         />
       )}
 
