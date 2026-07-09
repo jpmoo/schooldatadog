@@ -3,6 +3,7 @@
 import { requireUser } from "@/lib/auth/guards";
 import { getOllamaConfig } from "@/lib/settings";
 import { OLLAMA_KEEP_ALIVE } from "@/lib/ollama/warm";
+import { extractJson } from "@/lib/ai/parse";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -21,25 +22,6 @@ export type ChatResult =
   | { ok: true; reply: string; chart: unknown | null }
   | { ok: false; error: string };
 
-/** Pull a JSON object out of a model reply, tolerating code fences / stray prose. */
-function extractJson(text: string): { reply?: unknown; chart?: unknown } | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    const s = candidate.indexOf("{");
-    const e = candidate.lastIndexOf("}");
-    if (s >= 0 && e > s) {
-      try {
-        return JSON.parse(candidate.slice(s, e + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
 
 // Kept free of per-turn state (entity list, chart JSON) so it stays identical
 // across a conversation and the Ollama server can reuse the cached prompt prefix
@@ -146,6 +128,41 @@ async function summarizeHistory(
   }
 }
 
+export type PromptMessage = { role: "system" | "user" | "assistant"; content: string };
+
+/**
+ * Assemble the Ollama message list: a static (cacheable) system prompt, the
+ * volatile entity/chart state, and the conversation (older turns condensed).
+ * Shared by the non-streaming action below and the streaming route handler.
+ */
+export async function buildVisualizerMessages(
+  baseUrl: string,
+  model: string,
+  messages: ChatMessage[],
+  currentSpec: unknown,
+  catalog: VizCatalog,
+): Promise<PromptMessage[]> {
+  let history: ChatMessage[] = messages;
+  if (messages.length > KEEP_RECENT + 4) {
+    const older = messages.slice(0, messages.length - KEEP_RECENT);
+    const recent = messages.slice(messages.length - KEEP_RECENT);
+    const summary = await summarizeHistory(baseUrl, model, older);
+    history = summary
+      ? [{ role: "user", content: `Summary of our earlier conversation:\n${summary}` }, ...recent]
+      : recent;
+  }
+  const sel = catalog.selectedEntities ?? [];
+  const entityLine = sel.length
+    ? `${sel.length} selected: ${sel.slice(0, 80).join(", ")}${sel.length > 80 ? `, …(+${sel.length - 80} more)` : ""}`
+    : "(none selected yet)";
+  const stateMsg = `# Entities currently on the chart\n${entityLine}\n\n# The current chart (JSON)\n${JSON.stringify(currentSpec)}`;
+  return [
+    { role: "system", content: systemPrompt(catalog) },
+    { role: "system", content: stateMsg },
+    ...history,
+  ];
+}
+
 /** One turn of the Visualizer AI conversation (best-effort, via Ollama chat). */
 export async function visualizerChat(
   messages: ChatMessage[],
@@ -161,29 +178,10 @@ export async function visualizerChat(
     };
   }
 
-  // Summarize older turns when the history grows long, so the model keeps the
-  // gist of the session without us shipping the entire transcript every time.
-  let history = messages;
-  if (messages.length > KEEP_RECENT + 4) {
-    const older = messages.slice(0, messages.length - KEEP_RECENT);
-    const recent = messages.slice(messages.length - KEEP_RECENT);
-    const summary = await summarizeHistory(baseUrl, model, older);
-    history = summary
-      ? [{ role: "user", content: `Summary of our earlier conversation:\n${summary}` }, ...recent]
-      : recent;
-  }
-
-  // Volatile per-turn state (entity selection + current chart) goes in its own
-  // message so the catalog-heavy system prompt stays cacheable across turns.
-  const sel = catalog.selectedEntities ?? [];
-  const entityLine = sel.length
-    ? `${sel.length} selected: ${sel.slice(0, 80).join(", ")}${sel.length > 80 ? `, …(+${sel.length - 80} more)` : ""}`
-    : "(none selected yet)";
-  const stateMsg = `# Entities currently on the chart\n${entityLine}\n\n# The current chart (JSON)\n${JSON.stringify(currentSpec)}`;
-
   // No client-side timeout — a local model can legitimately take minutes to
   // think, especially for open-ended questions. Let it run to completion.
   try {
+    const messagesForOllama = await buildVisualizerMessages(baseUrl, model, messages, currentSpec, catalog);
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -193,11 +191,7 @@ export async function visualizerChat(
         format: "json",
         options: { temperature: 0.2 },
         keep_alive: OLLAMA_KEEP_ALIVE,
-        messages: [
-          { role: "system", content: systemPrompt(catalog) },
-          { role: "system", content: stateMsg },
-          ...history,
-        ],
+        messages: messagesForOllama,
       }),
       cache: "no-store",
     });

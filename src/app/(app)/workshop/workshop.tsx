@@ -17,6 +17,7 @@ import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
 import { YesNoDialog } from "@/components/yes-no-dialog";
+import { streamAiChat } from "@/lib/ai/stream-client";
 import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
@@ -515,31 +516,53 @@ export function Workshop({
     return { state, catalog };
   }
 
+  // Replace the trailing assistant placeholder as the reply streams / resolves.
+  const setLastAssistant = (content: string, error = false) =>
+    setAiMsgs((m) => {
+      const n = [...m];
+      n[n.length - 1] = { role: "assistant", content, ...(error ? { error: true } : {}) };
+      return n;
+    });
+
   async function sendAi() {
     const text = aiInput.trim();
     if (!text || aiBusy) return;
     const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
-    setAiMsgs((m) => [...m, { role: "user", content: text }]);
+    setAiMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "…" }]);
     setAiInput("");
     setAiBusy(true);
     const { state, catalog } = aiRequestContext();
-    const res = await worksheetChat(history, state, catalog);
-    setAiBusy(false);
-    if (res.ok) {
-      const reply = (res.reply ?? "").trim();
-      if (res.sheet) {
-        // Don't touch the table yet — show what the AI proposes and ask first.
-        const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
-        setAiMsgs((m) => [
-          ...m,
-          { role: "assistant", content: !reply || looksJson ? "I've prepared an update to your table." : reply },
-        ]);
-        setPendingSheet({ sheet: res.sheet, reply });
-      } else {
-        setAiMsgs((m) => [...m, { role: "assistant", content: reply || "(done)" }]);
-      }
+
+    let reply = "";
+    let command: unknown = null;
+    const streamed = await streamAiChat(
+      "worksheet",
+      { messages: history, state, catalog },
+      (partial) => partial && setLastAssistant(partial),
+    );
+    if (streamed.ok) {
+      reply = (streamed.reply ?? "").trim();
+      command = streamed.command;
     } else {
-      setAiMsgs((m) => [...m, { role: "assistant", content: res.error, error: true }]);
+      // Streaming unavailable — fall back to the non-streaming action.
+      const res = await worksheetChat(history, state, catalog);
+      if (!res.ok) {
+        setAiBusy(false);
+        setLastAssistant(res.error, true);
+        return;
+      }
+      reply = (res.reply ?? "").trim();
+      command = res.sheet;
+    }
+    setAiBusy(false);
+
+    if (command) {
+      // Don't touch the table yet — show what the AI proposes and ask first.
+      const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
+      setLastAssistant(!reply || looksJson ? "I've prepared an update to your table." : reply);
+      setPendingSheet({ sheet: command, reply });
+    } else {
+      setLastAssistant(reply || "(done)");
     }
   }
   // "Yes" on the apply challenge — carry out the AI's proposed change.

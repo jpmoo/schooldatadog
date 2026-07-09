@@ -17,8 +17,13 @@ function normalizeBasePath(): string | undefined {
   return raw.startsWith("/") ? raw : `/${raw}`;
 }
 
+const basePath = normalizeBasePath();
+
 const nextConfig: NextConfig = {
-  basePath: normalizeBasePath(),
+  basePath,
+  // Exposed to the browser so client-side fetch() to our route handlers can
+  // include the basePath prefix (Next only auto-prefixes router/Link URLs).
+  env: { NEXT_PUBLIC_BASE_PATH: basePath ?? "" },
 };
 
 export default nextConfig;

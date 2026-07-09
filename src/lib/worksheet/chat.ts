@@ -3,6 +3,7 @@
 import { requireUser } from "@/lib/auth/guards";
 import { getOllamaConfig } from "@/lib/settings";
 import { OLLAMA_KEEP_ALIVE } from "@/lib/ollama/warm";
+import { extractJson } from "@/lib/ai/parse";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -19,25 +20,6 @@ export type SheetChatResult =
   | { ok: true; reply: string; sheet: unknown | null }
   | { ok: false; error: string };
 
-/** Pull a JSON object out of a model reply, tolerating code fences / stray prose. */
-function extractJson(text: string): { reply?: unknown; sheet?: unknown } | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    const s = candidate.indexOf("{");
-    const e = candidate.lastIndexOf("}");
-    if (s >= 0 && e > s) {
-      try {
-        return JSON.parse(candidate.slice(s, e + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
 
 // The system prompt is intentionally free of any per-turn state so it stays
 // byte-identical across a conversation — that lets the Ollama server reuse the
@@ -156,6 +138,36 @@ async function summarizeHistory(baseUrl: string, model: string, older: ChatMessa
   }
 }
 
+export type PromptMessage = { role: "system" | "user" | "assistant"; content: string };
+
+/**
+ * Assemble the Ollama message list: a static (cacheable) system prompt, the
+ * volatile table state, and the conversation (older turns condensed). Shared by
+ * the non-streaming action below and the streaming route handler.
+ */
+export async function buildWorksheetMessages(
+  baseUrl: string,
+  model: string,
+  messages: ChatMessage[],
+  currentState: unknown,
+  catalog: SheetCatalog,
+): Promise<PromptMessage[]> {
+  let history: ChatMessage[] = messages;
+  if (messages.length > KEEP_RECENT + 4) {
+    const older = messages.slice(0, messages.length - KEEP_RECENT);
+    const recent = messages.slice(messages.length - KEEP_RECENT);
+    const summary = await summarizeHistory(baseUrl, model, older);
+    history = summary
+      ? [{ role: "user", content: `Summary of our earlier conversation:\n${summary}` }, ...recent]
+      : recent;
+  }
+  return [
+    { role: "system", content: systemPrompt(catalog) },
+    { role: "system", content: `# The current table (JSON)\n${JSON.stringify(currentState)}` },
+    ...history,
+  ];
+}
+
 /** One turn of the Workshop AI conversation (best-effort, via Ollama chat). */
 export async function worksheetChat(
   messages: ChatMessage[],
@@ -171,17 +183,8 @@ export async function worksheetChat(
     };
   }
 
-  let history = messages;
-  if (messages.length > KEEP_RECENT + 4) {
-    const older = messages.slice(0, messages.length - KEEP_RECENT);
-    const recent = messages.slice(messages.length - KEEP_RECENT);
-    const summary = await summarizeHistory(baseUrl, model, older);
-    history = summary
-      ? [{ role: "user", content: `Summary of our earlier conversation:\n${summary}` }, ...recent]
-      : recent;
-  }
-
   try {
+    const messagesForOllama = await buildWorksheetMessages(baseUrl, model, messages, currentState, catalog);
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -191,11 +194,7 @@ export async function worksheetChat(
         format: "json",
         options: { temperature: 0.2 },
         keep_alive: OLLAMA_KEEP_ALIVE,
-        messages: [
-          { role: "system", content: systemPrompt(catalog) },
-          { role: "system", content: `# The current table (JSON)\n${JSON.stringify(currentState)}` },
-          ...history,
-        ],
+        messages: messagesForOllama,
       }),
       cache: "no-store",
     });
