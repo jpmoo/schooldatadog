@@ -25,7 +25,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const { baseUrl, model } = await getOllamaConfig();
-  if (!baseUrl || !model) return new Response("AI is not configured.", { status: 503 });
+  if (!baseUrl || !model) return new Response("Scout is not configured.", { status: 503 });
 
   const history = (Array.isArray(body?.messages) ? body?.messages : []) as ChatMessage[];
   const messagesForOllama =
@@ -49,10 +49,10 @@ export async function POST(req: Request): Promise<Response> {
       cache: "no-store",
     });
   } catch {
-    return new Response("Couldn't reach the AI server.", { status: 502 });
+    return new Response("Couldn't reach Scout.", { status: 502 });
   }
   if (!ollamaRes.ok || !ollamaRes.body) {
-    return new Response(`The AI server returned HTTP ${ollamaRes.status}.`, { status: 502 });
+    return new Response(`Scout's server returned HTTP ${ollamaRes.status}.`, { status: 502 });
   }
 
   // Ollama streams NDJSON; forward only each line's message.content as plain text.

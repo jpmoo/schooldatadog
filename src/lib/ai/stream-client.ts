@@ -46,7 +46,7 @@ export async function streamAiChat(
       signal,
     });
     if (!res.ok || !res.body) {
-      return { ok: false, error: `The AI server returned HTTP ${res.status}.` };
+      return { ok: false, error: `Scout's server returned HTTP ${res.status}.` };
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -62,7 +62,7 @@ export async function streamAiChat(
       onReply(building ? buildingMsg : replyText);
     }
   } catch {
-    return { ok: false, error: "Couldn't reach the AI server." };
+    return { ok: false, error: "Couldn't reach Scout." };
   }
 
   const [content, statsPart] = raw.split(STATS_SEP);

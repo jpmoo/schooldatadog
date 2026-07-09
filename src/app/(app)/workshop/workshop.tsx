@@ -1658,14 +1658,14 @@ export function Workshop({
         )}
       </div>
 
-      {/* BOTTOM — AI assistant */}
+      {/* BOTTOM — Scout assistant */}
       <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <button
           onClick={() => setAiOpen((v) => !v)}
           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm font-medium text-slate-700 dark:text-slate-200"
         >
-          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">AI</span>
-          <span className="flex-1">Ask the AI to build or explain this table</span>
+          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">Scout</span>
+          <span className="flex-1">Ask Scout to build or explain this table</span>
           <span className="text-slate-400">{aiOpen ? "▼" : "▲"}</span>
         </button>
         {aiOpen && (
@@ -1705,7 +1705,7 @@ export function Workshop({
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendAi(); } }}
-                placeholder="Tell the AI what to put in the table, or ask about the data…"
+                placeholder="Tell Scout what to put in the table, or ask about the data…"
                 className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
               {aiBusy ? (

@@ -1498,14 +1498,14 @@ export function Visualizer({
         </aside>
       </div>
 
-      {/* BOTTOM — AI assistant */}
+      {/* BOTTOM — Scout assistant */}
       <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <button
           onClick={() => setAiOpen((v) => !v)}
           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm font-medium text-slate-700 dark:text-slate-200"
         >
-          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">AI</span>
-          <span className="flex-1">Ask the AI to build or explain this chart</span>
+          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">Scout</span>
+          <span className="flex-1">Ask Scout to build or explain this chart</span>
           <span className="text-slate-400">{aiOpen ? "▼" : "▲"}</span>
         </button>
         {aiOpen && (
@@ -1544,7 +1544,7 @@ export function Visualizer({
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendAi(); } }}
-                placeholder="Tell the AI what to chart, or ask about the data…"
+                placeholder="Tell Scout what to chart, or ask about the data…"
                 className={`${input} flex-1`}
               />
               {aiBusy ? (

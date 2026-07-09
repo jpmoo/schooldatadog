@@ -174,7 +174,7 @@ export async function visualizerChat(
   if (!baseUrl || !model) {
     return {
       ok: false,
-      error: "AI isn't configured. An admin can set the Ollama server and inference model in System Settings.",
+      error: "Scout isn't configured. An admin can set the Ollama server and inference model in Administration.",
     };
   }
 
@@ -195,7 +195,7 @@ export async function visualizerChat(
       }),
       cache: "no-store",
     });
-    if (!res.ok) return { ok: false, error: `The AI server returned HTTP ${res.status}.` };
+    if (!res.ok) return { ok: false, error: `Scout's server returned HTTP ${res.status}.` };
     const data = (await res.json()) as { message?: { content?: string } };
     const content = data?.message?.content ?? "";
     const parsed = extractJson(content);
@@ -209,6 +209,6 @@ export async function visualizerChat(
     // No JSON at all — treat the whole thing as a prose answer.
     return { ok: true, reply: content || "(no response)", chart: null };
   } catch {
-    return { ok: false, error: "Couldn't reach the AI server." };
+    return { ok: false, error: "Couldn't reach Scout." };
   }
 }

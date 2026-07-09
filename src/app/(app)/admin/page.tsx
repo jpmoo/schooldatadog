@@ -6,8 +6,8 @@ type Tool = { title: string; body: string; href: string };
 
 const tools: Tool[] = [
   {
-    title: "AI / Ollama",
-    body: "Connect to your Ollama server by IP/port and choose the inference and embedding models.",
+    title: "Scout",
+    body: "Connect Scout to your Ollama server by IP/port and choose the inference and embedding models.",
     href: "/admin/ai",
   },
   {
@@ -49,7 +49,7 @@ export default async function AdminPage() {
           Administration
         </h1>
         <p className="mt-1 text-slate-500 dark:text-slate-400">
-          Admin tools for AI, the data dictionary, entities, users, and the activity log.
+          Admin tools for Scout, the data dictionary, entities, users, and the activity log.
         </p>
       </div>
 

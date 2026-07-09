@@ -44,7 +44,7 @@ const savedTiles: Tile[] = [
   },
   {
     title: "Administration",
-    body: "Admin tools for AI/Ollama, the data dictionary, entities, users, and the activity log.",
+    body: "Admin tools for Scout, the data dictionary, entities, users, and the activity log.",
     href: "/admin",
     icon: "Settings",
     adminOnly: true,
