@@ -15,6 +15,13 @@ export const OLLAMA_KEEP_ALIVE = "4h";
 export const OLLAMA_NUM_CTX = 8192;
 
 /**
+ * Hard cap on generated tokens. Any real reply or sheet/chart command fits well
+ * under this; it exists so a confused model can never run away and hang the UI
+ * for minutes. (A generation param, not a load param — safe to vary per call.)
+ */
+export const OLLAMA_NUM_PREDICT = 2048;
+
+/**
  * Preload the inference model into Ollama so the first real prompt is fast, and
  * set a long idle keep-alive. Best-effort and non-blocking — a slow/absent
  * Ollama must never affect the caller (e.g. login).

@@ -5,7 +5,7 @@
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { getOllamaConfig } from "@/lib/settings";
-import { OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX } from "@/lib/ollama/warm";
+import { OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT } from "@/lib/ollama/warm";
 import { buildWorksheetMessages, type ChatMessage, type SheetCatalog } from "@/lib/worksheet/chat";
 import { buildVisualizerMessages, type VizCatalog } from "@/lib/viz/chat";
 
@@ -42,7 +42,7 @@ export async function POST(req: Request): Promise<Response> {
         model,
         stream: true,
         format: "json",
-        options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX },
+        options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: messagesForOllama,
       }),

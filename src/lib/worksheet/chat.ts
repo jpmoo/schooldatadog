@@ -2,7 +2,7 @@
 
 import { requireUser } from "@/lib/auth/guards";
 import { getOllamaConfig } from "@/lib/settings";
-import { OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX } from "@/lib/ollama/warm";
+import { OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT } from "@/lib/ollama/warm";
 import { extractJson } from "@/lib/ai/parse";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -117,7 +117,7 @@ async function summarizeHistory(baseUrl: string, model: string, older: ChatMessa
       body: JSON.stringify({
         model,
         stream: false,
-        options: { temperature: 0, num_ctx: OLLAMA_NUM_CTX },
+        options: { temperature: 0, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: [
           {
@@ -192,7 +192,7 @@ export async function worksheetChat(
         model,
         stream: false,
         format: "json",
-        options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX },
+        options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: messagesForOllama,
       }),
