@@ -7,7 +7,7 @@ import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
 import { YesNoDialog } from "@/components/yes-no-dialog";
-import { streamAiChat } from "@/lib/ai/stream-client";
+import { formatAiStats, streamAiChat } from "@/lib/ai/stream-client";
 import {
   ALL_STUDENTS,
   type CalcColumn,
@@ -390,6 +390,8 @@ export function Visualizer({
   const [aiBusy, setAiBusy] = useState(false);
   // A proposed AI chart change awaiting the user's OK (edit/replace guard).
   const [pendingChart, setPendingChart] = useState<{ chart: unknown; text: string } | null>(null);
+  // Last AI turn's speed, shown in the panel to gauge model latency.
+  const [aiStats, setAiStats] = useState<{ seconds: number; tokens?: number; tokensPerSec?: number } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   useEffect(() => {
     aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
@@ -490,6 +492,7 @@ export function Visualizer({
     setAiMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "…" }]);
     setAiInput("");
     setAiBusy(true);
+    const started = performance.now();
 
     let reply = "";
     let command: unknown = null;
@@ -513,6 +516,8 @@ export function Visualizer({
       command = res.chart;
     }
     setAiBusy(false);
+    const t = streamed.ok ? streamed.timings : null;
+    setAiStats({ seconds: (performance.now() - started) / 1000, tokens: t?.tokens, tokensPerSec: t?.tokensPerSec });
 
     if (command) {
       // Don't change the chart yet — show what the AI proposes and ask first.
@@ -1510,6 +1515,11 @@ export function Visualizer({
               ))}
               {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
             </div>
+            {aiStats && !aiBusy && (
+              <p className="border-t border-slate-200 px-3 py-1 text-right text-[11px] text-slate-400 dark:border-slate-800">
+                {formatAiStats(aiStats)}
+              </p>
+            )}
             <div className="flex gap-2 border-t border-slate-200 p-2 dark:border-slate-800">
               <input
                 value={aiInput}

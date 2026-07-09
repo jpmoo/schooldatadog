@@ -17,7 +17,7 @@ import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
 import { YesNoDialog } from "@/components/yes-no-dialog";
-import { streamAiChat } from "@/lib/ai/stream-client";
+import { formatAiStats, streamAiChat } from "@/lib/ai/stream-client";
 import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
@@ -308,6 +308,8 @@ export function Workshop({
   const [aiBusy, setAiBusy] = useState(false);
   // A proposed AI sheet change awaiting the user's OK (edit/replace guard).
   const [pendingSheet, setPendingSheet] = useState<{ sheet: unknown; reply: string } | null>(null);
+  // Last AI turn's speed, shown in the panel to gauge model latency.
+  const [aiStats, setAiStats] = useState<{ seconds: number; tokens?: number; tokensPerSec?: number } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   const metricByCode = useMemo(() => new Map(initialMetrics.map((m) => [m.code, m])), [initialMetrics]);
   useEffect(() => {
@@ -531,6 +533,7 @@ export function Workshop({
     setAiMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "…" }]);
     setAiInput("");
     setAiBusy(true);
+    const started = performance.now();
     const { state, catalog } = aiRequestContext();
 
     let reply = "";
@@ -555,6 +558,8 @@ export function Workshop({
       command = res.sheet;
     }
     setAiBusy(false);
+    const t = streamed.ok ? streamed.timings : null;
+    setAiStats({ seconds: (performance.now() - started) / 1000, tokens: t?.tokens, tokensPerSec: t?.tokensPerSec });
 
     if (command) {
       // Don't touch the table yet — show what the AI proposes and ask first.
@@ -1671,6 +1676,11 @@ export function Workshop({
               ))}
               {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
             </div>
+            {aiStats && !aiBusy && (
+              <p className="border-t border-slate-200 px-3 py-1 text-right text-[11px] text-slate-400 dark:border-slate-800">
+                {formatAiStats(aiStats)}
+              </p>
+            )}
             <div className="flex gap-2 border-t border-slate-200 p-2 dark:border-slate-800">
               <input
                 value={aiInput}

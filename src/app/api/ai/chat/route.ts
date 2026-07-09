@@ -74,9 +74,27 @@ export async function POST(req: Request): Promise<Response> {
         const trimmed = line.trim();
         if (!trimmed) continue;
         try {
-          const obj = JSON.parse(trimmed) as { message?: { content?: string } };
+          const obj = JSON.parse(trimmed) as {
+            message?: { content?: string };
+            done?: boolean;
+            eval_count?: number;
+            eval_duration?: number;
+            prompt_eval_count?: number;
+            prompt_eval_duration?: number;
+          };
           const content = obj.message?.content;
           if (content) controller.enqueue(encoder.encode(content));
+          // Ollama's final chunk carries the timing stats (ns). Append them after
+          // a record-separator (0x1e) so the client can split them off the reply.
+          if (obj.done) {
+            const stats = {
+              eval_count: obj.eval_count ?? 0,
+              eval_duration: obj.eval_duration ?? 0,
+              prompt_eval_count: obj.prompt_eval_count ?? 0,
+              prompt_eval_duration: obj.prompt_eval_duration ?? 0,
+            };
+            controller.enqueue(encoder.encode("\x1e" + JSON.stringify(stats)));
+          }
         } catch {
           // ignore a non-JSON / partial line
         }
