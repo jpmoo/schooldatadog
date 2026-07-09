@@ -274,7 +274,10 @@ export function Visualizer({
     setEntScope(st.viewMode === "schools" ? "school" : st.viewMode === "districts" ? "district" : "mixed");
     // Default encoding so a chart draws on import (old encoding referenced the
     // previous fields). Multi-year → a line over years, one line per entity.
-    const firstField = fields[0]?.id ?? calc[0]?.id;
+    // Prefer a directly-plottable field; fall back to a calc field (e.g. a growth
+    // rate) when every field is only there to feed a calc.
+    const firstField =
+      fields.find((f) => !calcRefs.has(f.id))?.id ?? calc[0]?.id ?? fields[0]?.id;
     const multiYear = fields.some((f) => f.years.length > 1);
     const encoding: ChartSpec["encoding"] = !firstField
       ? {}

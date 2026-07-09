@@ -26,7 +26,14 @@ export async function resolveDataset(
   homeDistrictId: number | null = null,
 ): Promise<ResolvedData> {
   const ids = new Set(data.entities.ids);
-  const years = [...new Set(data.fields.flatMap((f) => f.years))].sort();
+  const calc = data.calc ?? [];
+  // Fields that exist only to feed a calc field must not drive the year axis: a
+  // growth rate built from several single-year source columns would otherwise
+  // multiply each entity into one row per source year (and double-count on bars).
+  const calcSourceIds = new Set(calc.flatMap((c) => c.sourceIds));
+  const years = [
+    ...new Set(data.fields.filter((f) => !calcSourceIds.has(f.id)).flatMap((f) => f.years)),
+  ].sort();
 
   // Fetch every (field, year) once → entityId → value.
   const values = new Map<string, Map<number, number | null>>();
@@ -41,29 +48,32 @@ export async function resolveDataset(
     ),
   );
 
-  const calc = data.calc ?? [];
   const yearAxis = years.length ? years : [""];
 
-  // Compute calculated fields per year, reusing the workshop calc engine over
-  // the resolved data-field values as pseudo data columns.
-  const calcByYear = new Map<string, Record<string, Record<number, number | null>>>();
-  for (const yr of yearAxis) {
-    const columnsById: Record<string, Column> = {};
-    for (const f of data.fields) {
-      const m = values.get(key(f.id, yr));
-      const vals: Record<number, number | null> = {};
-      for (const eid of data.entities.ids) vals[eid] = f.years.includes(yr) ? (m?.get(eid) ?? null) : null;
-      columnsById[f.id] = { id: f.id, kind: "data", values: vals } as unknown as Column;
+  // Calculated fields are evaluated ONCE over the full set of source columns — a
+  // growth rate (CAGR / change / slope) reads its sources as a series across
+  // years, so it can't be computed one year at a time. Each source field maps to
+  // a single value per entity (its value at the field's own year).
+  const columnsById: Record<string, Column> = {};
+  for (const f of data.fields) {
+    const vals: Record<number, number | null> = {};
+    for (const eid of data.entities.ids) {
+      let v: number | null = null;
+      for (const yr of f.years) {
+        const got = values.get(key(f.id, yr))?.get(eid);
+        if (got != null) v = got;
+      }
+      vals[eid] = v;
     }
-    const byField: Record<string, Record<number, number | null>> = {};
-    for (const c of calc) {
-      byField[c.id] = computeCalc(
-        { ...c, kind: "calc" } as unknown as Parameters<typeof computeCalc>[0],
-        data.entities.ids,
-        columnsById,
-      );
-    }
-    calcByYear.set(yr, byField);
+    columnsById[f.id] = { id: f.id, kind: "data", values: vals } as unknown as Column;
+  }
+  const calcValues: Record<string, Record<number, number | null>> = {};
+  for (const c of calc) {
+    calcValues[c.id] = computeCalc(
+      { ...c, kind: "calc" } as unknown as Parameters<typeof computeCalc>[0],
+      data.entities.ids,
+      columnsById,
+    );
   }
 
   const rows: Row[] = [];
@@ -85,7 +95,7 @@ export async function resolveDataset(
         // A field contributes its value only for years it actually spans.
         row[f.id] = f.years.includes(yr) ? (values.get(key(f.id, yr))?.get(eid) ?? null) : null;
       }
-      for (const c of calc) row[c.id] = calcByYear.get(yr)?.[c.id]?.[eid] ?? null;
+      for (const c of calc) row[c.id] = calcValues[c.id]?.[eid] ?? null;
       rows.push(row);
     }
   }
