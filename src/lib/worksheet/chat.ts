@@ -118,6 +118,9 @@ async function summarizeHistory(baseUrl: string, model: string, older: ChatMessa
         model,
         stream: false,
         options: { temperature: 0, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
+        // Reasoning models (e.g. qwen3) otherwise burn the whole token budget on
+        // an unused chain-of-thought, leaving no answer. We don't use it.
+        think: false,
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: [
           {
@@ -193,6 +196,7 @@ export async function worksheetChat(
         stream: false,
         format: "json",
         options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
+        think: false, // don't spend the token budget on an unused chain-of-thought
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: messagesForOllama,
       }),
