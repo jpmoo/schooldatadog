@@ -5,7 +5,7 @@
 
 import { getColumnValues } from "@/lib/workshop/actions";
 import type { WorkshopEntity } from "@/lib/workshop/queries";
-import { computeCalc, type Column } from "@/app/(app)/workshop/columns";
+import { ALL_STUDENTS, computeCalc, type Column } from "@/app/(app)/workshop/columns";
 import type { CalcFieldSpec, DataSpec, FieldSpec } from "./spec";
 
 export type Row = Record<string, string | number | null>;
@@ -40,7 +40,14 @@ export async function resolveDataset(
   await Promise.all(
     data.fields.flatMap((f) =>
       f.years.map(async (yr) => {
-        const rows = await getColumnValues(f.metric, yr, f.subgroup);
+        let rows = await getColumnValues(f.metric, yr, f.subgroup);
+        // Self-heal Scout's subgroup guesses: composition/share metrics (the "%
+        // of enrollment" family) are stored ONLY under "All Students". If a
+        // demographic subgroup was attached, the slice is empty — fall back to
+        // All Students so the field isn't blank. (Mirrors the workshop apply.)
+        if (rows.length === 0 && f.subgroup !== ALL_STUDENTS) {
+          rows = await getColumnValues(f.metric, yr, ALL_STUDENTS);
+        }
         const m = new Map<number, number | null>();
         for (const v of rows) if (ids.has(v.entityId)) m.set(v.entityId, v.value);
         values.set(key(f.id, yr), m);
