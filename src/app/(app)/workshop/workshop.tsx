@@ -318,9 +318,18 @@ export function Workshop({
   const aiCancelRef = useRef<{ stopped: boolean } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   const metricByCode = useMemo(() => new Map(initialMetrics.map((m) => [m.code, m])), [initialMetrics]);
-  useEffect(() => {
-    aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
-  }, [aiMsgs, aiBusy]);
+  // Scroll the message at `index` to the top of the chat pane, so a fresh reply
+  // is read from its start rather than jumping to the bottom of a long answer.
+  const scrollMsgToTop = (index: number) => {
+    requestAnimationFrame(() => {
+      const c = aiScroll.current;
+      const el = c?.querySelector<HTMLElement>(`[data-mi="${index}"]`);
+      if (c && el) {
+        const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 6;
+        c.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      }
+    });
+  };
 
   // Apply an AI "sheet" command: set the data + calculated columns, view/filters/sort.
   async function applyAiSheet(sheet: unknown, reply = "") {
@@ -535,10 +544,12 @@ export function Workshop({
   async function sendAi() {
     const text = aiInput.trim();
     if (!text || aiBusy) return;
+    const turnStart = aiMsgs.length; // index the new user message will occupy
     const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
     setAiMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "…" }]);
     setAiInput("");
     setAiBusy(true);
+    scrollMsgToTop(turnStart); // put the question at the top while Scout thinks
     const started = performance.now();
     const { state, catalog } = aiRequestContext();
     // A server action can't be aborted mid-flight, so "Stop" just flags the turn
@@ -554,6 +565,7 @@ export function Workshop({
 
     if (!res.ok) {
       setLastAssistant(res.error, true);
+      scrollMsgToTop(turnStart);
       return;
     }
     const reply = (res.reply ?? "").trim();
@@ -566,6 +578,7 @@ export function Workshop({
     } else {
       setLastAssistant(reply || "(done)");
     }
+    scrollMsgToTop(turnStart); // keep the question at the top; reply flows below
   }
   // "Stop" — abandon the in-flight turn (its result is discarded on return).
   function stopAi() {
@@ -591,6 +604,7 @@ export function Workshop({
           "I've decided not to apply that change to my worksheet. Please respond briefly and politely, and offer to help another way. Do not change the table.",
       },
     ];
+    const turnStart = aiMsgs.length; // index of the acknowledgement bubble
     setAiMsgs((m) => [...m, { role: "assistant", content: "…" }]);
     setAiBusy(true);
     const { state, catalog } = aiRequestContext();
@@ -601,6 +615,7 @@ export function Workshop({
         ? (res.reply as string).trim()
         : "No problem — tell me what you'd like to do instead.";
     setLastAssistant(content);
+    scrollMsgToTop(turnStart);
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -1670,7 +1685,7 @@ export function Workshop({
                 </p>
               )}
               {aiMsgs.map((m, i) => (
-                <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                <div key={i} data-mi={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
                   <div
                     className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-sm ${
                       m.role === "user"

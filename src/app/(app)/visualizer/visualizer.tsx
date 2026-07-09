@@ -418,9 +418,18 @@ export function Visualizer({
   // Aborts the in-flight AI request (the "Stop" button).
   const aiCancelRef = useRef<{ stopped: boolean } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
-  }, [aiMsgs, aiBusy]);
+  // Scroll the message at `index` to the top of the chat pane, so a fresh reply
+  // is read from its start rather than jumping to the bottom of a long answer.
+  const scrollMsgToTop = (index: number) => {
+    requestAnimationFrame(() => {
+      const c = aiScroll.current;
+      const el = c?.querySelector<HTMLElement>(`[data-mi="${index}"]`);
+      if (c && el) {
+        const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 6;
+        c.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      }
+    });
+  };
 
   // Full metric catalog (for the AI prompt + resolving codes the AI returns).
   const metricByCode = useMemo(
@@ -514,10 +523,12 @@ export function Visualizer({
   async function sendAi() {
     const text = aiInput.trim();
     if (!text || aiBusy) return;
+    const turnStart = aiMsgs.length; // index the new user message will occupy
     const history: ChatMessage[] = [...aiMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: text }];
     setAiMsgs((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "…" }]);
     setAiInput("");
     setAiBusy(true);
+    scrollMsgToTop(turnStart); // put the question at the top while Scout thinks
     const started = performance.now();
     // A server action can't be aborted mid-flight, so "Stop" just flags the turn
     // to be discarded when it returns.
@@ -532,6 +543,7 @@ export function Visualizer({
 
     if (!res.ok) {
       setLastAssistant(res.error, true);
+      scrollMsgToTop(turnStart);
       return;
     }
     const reply = (res.reply ?? "").trim();
@@ -544,6 +556,7 @@ export function Visualizer({
     } else {
       setLastAssistant(reply || "(done)");
     }
+    scrollMsgToTop(turnStart); // keep the question at the top; reply flows below
   }
   // "Stop" — abandon the in-flight turn (its result is discarded on return).
   function stopAi() {
@@ -569,6 +582,7 @@ export function Visualizer({
           "I've decided not to apply that change to my visualization. Please respond briefly and politely, and offer to help another way. Do not change the chart.",
       },
     ];
+    const turnStart = aiMsgs.length; // index of the acknowledgement bubble
     setAiMsgs((m) => [...m, { role: "assistant", content: "…" }]);
     setAiBusy(true);
     const res = await visualizerChat(history, spec, aiCatalog());
@@ -578,6 +592,7 @@ export function Visualizer({
         ? (res.reply as string).trim()
         : "No problem — tell me what you'd like to do instead.";
     setLastAssistant(content);
+    scrollMsgToTop(turnStart);
   }
 
   // A fresh chart starts on "Districts only" — populate that set once on mount.
@@ -1529,7 +1544,7 @@ export function Visualizer({
                 </p>
               )}
               {aiMsgs.map((m, i) => (
-                <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                <div key={i} data-mi={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
                   <div
                     className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-sm ${
                       m.role === "user"
