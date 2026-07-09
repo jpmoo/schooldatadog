@@ -8,7 +8,7 @@ import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
 import { TypingDots } from "@/components/typing-dots";
 import { YesNoDialog } from "@/components/yes-no-dialog";
-import { formatAiStats, streamAiChat } from "@/lib/ai/stream-client";
+import { formatAiStats } from "@/lib/ai/stream-client";
 import {
   ALL_STUDENTS,
   type CalcColumn,
@@ -396,7 +396,7 @@ export function Visualizer({
   // Last AI turn's speed, shown in the panel to gauge model latency.
   const [aiStats, setAiStats] = useState<{ seconds: number; tokens?: number; tokensPerSec?: number } | null>(null);
   // Aborts the in-flight AI request (the "Stop" button).
-  const aiAbortRef = useRef<AbortController | null>(null);
+  const aiCancelRef = useRef<{ stopped: boolean } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   useEffect(() => {
     aiScroll.current?.scrollTo({ top: aiScroll.current.scrollHeight });
@@ -498,43 +498,23 @@ export function Visualizer({
     setAiInput("");
     setAiBusy(true);
     const started = performance.now();
-    const controller = new AbortController();
-    aiAbortRef.current = controller;
+    // A server action can't be aborted mid-flight, so "Stop" just flags the turn
+    // to be discarded when it returns.
+    const cancel = { stopped: false };
+    aiCancelRef.current = cancel;
 
-    let reply = "";
-    let command: unknown = null;
-    const streamed = await streamAiChat(
-      "visualizer",
-      { messages: history, state: spec, catalog: aiCatalog() },
-      (partial) => partial && setLastAssistant(partial),
-      controller.signal,
-    );
-    if (controller.signal.aborted) {
-      aiAbortRef.current = null;
-      setAiBusy(false);
-      setLastAssistant("Interrupted.");
+    const res = await visualizerChat(history, spec, aiCatalog());
+    if (cancel.stopped) return; // Stop already updated the UI
+    aiCancelRef.current = null;
+    setAiBusy(false);
+    setAiStats({ seconds: (performance.now() - started) / 1000 });
+
+    if (!res.ok) {
+      setLastAssistant(res.error, true);
       return;
     }
-    if (streamed.ok) {
-      reply = (streamed.reply ?? "").trim();
-      command = streamed.command;
-    } else {
-      // Streaming unavailable — fall back to the non-streaming action.
-      const res = await visualizerChat(history, spec, aiCatalog());
-      if (!res.ok) {
-        aiAbortRef.current = null;
-        setAiBusy(false);
-        setLastAssistant(res.error, true);
-        return;
-      }
-      reply = (res.reply ?? "").trim();
-      command = res.chart;
-    }
-    aiAbortRef.current = null;
-    setAiBusy(false);
-    const t = streamed.ok ? streamed.timings : null;
-    setAiStats({ seconds: (performance.now() - started) / 1000, tokens: t?.tokens, tokensPerSec: t?.tokensPerSec });
-
+    const reply = (res.reply ?? "").trim();
+    const command = res.chart;
     if (command) {
       // Don't change the chart yet — show what the AI proposes and ask first.
       const looksJson = /^[[{]/.test(reply) || reply.includes('"encoding"') || reply.includes('"fields"');
@@ -544,9 +524,12 @@ export function Visualizer({
       setLastAssistant(reply || "(done)");
     }
   }
-  // "Stop" — cancel the in-flight request (also disconnects Ollama via the route).
+  // "Stop" — abandon the in-flight turn (its result is discarded on return).
   function stopAi() {
-    aiAbortRef.current?.abort();
+    if (aiCancelRef.current) aiCancelRef.current.stopped = true;
+    aiCancelRef.current = null;
+    setAiBusy(false);
+    setLastAssistant("Interrupted.");
   }
   // "Yes" on the apply challenge — carry out the AI's proposed change.
   function confirmChartChange() {

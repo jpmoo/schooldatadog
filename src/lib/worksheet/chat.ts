@@ -55,7 +55,7 @@ ${catalog.counties.join(", ")}
 # The user's home district
 ${catalog.homeDistrict ? `${catalog.homeDistrict} — "my district" means this one.` : "(not set)"}
 
-The current table (JSON) is provided in a separate message.
+The current table (JSON) is included at the end of this message.
 
 ## How to respond
 Reply with a single JSON object: { "reply": string, "sheet": <sheet or null> }.
@@ -163,8 +163,7 @@ export async function buildWorksheetMessages(
       : recent;
   }
   return [
-    { role: "system", content: systemPrompt(catalog) },
-    { role: "system", content: `# The current table (JSON)\n${JSON.stringify(currentState)}` },
+    { role: "system", content: `${systemPrompt(catalog)}\n\n# The current table (JSON)\n${JSON.stringify(currentState)}` },
     ...history,
   ];
 }

@@ -55,7 +55,7 @@ ${catalog.groups.length ? catalog.groups.join(", ") : "(none)"}
 # The user's home district
 ${catalog.homeDistrict ? `${catalog.homeDistrict} — when the user says "my district", they mean this one.` : "(not set — if the user references their district and you don't know it, ask.)"}
 
-The entities currently on the chart and the current chart JSON are provided in a separate message.
+The entities currently on the chart and the current chart JSON are included at the end of this message.
 If the user already has a selection, ALWAYS use "entities":"keep" so the chart is built from EXACTLY that set (they often chose it deliberately, e.g. by importing a view). Do NOT switch to "districts"/"schools"/"both" (all entities) unless the user explicitly says "all districts", "every school", "statewide", etc. A histogram/count over "these districts" means a count over the SELECTED set, not the whole state.
 
 ## How to respond
@@ -158,8 +158,7 @@ export async function buildVisualizerMessages(
     : "(none selected yet)";
   const stateMsg = `# Entities currently on the chart\n${entityLine}\n\n# The current chart (JSON)\n${JSON.stringify(currentSpec)}`;
   return [
-    { role: "system", content: systemPrompt(catalog) },
-    { role: "system", content: stateMsg },
+    { role: "system", content: `${systemPrompt(catalog)}\n\n${stateMsg}` },
     ...history,
   ];
 }

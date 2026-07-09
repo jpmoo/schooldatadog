@@ -18,7 +18,7 @@ import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
 import { TypingDots } from "@/components/typing-dots";
 import { YesNoDialog } from "@/components/yes-no-dialog";
-import { formatAiStats, streamAiChat } from "@/lib/ai/stream-client";
+import { formatAiStats } from "@/lib/ai/stream-client";
 import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
@@ -314,7 +314,7 @@ export function Workshop({
   // Last AI turn's speed, shown in the panel to gauge model latency.
   const [aiStats, setAiStats] = useState<{ seconds: number; tokens?: number; tokensPerSec?: number } | null>(null);
   // Aborts the in-flight AI request (the "Stop" button).
-  const aiAbortRef = useRef<AbortController | null>(null);
+  const aiCancelRef = useRef<{ stopped: boolean } | null>(null);
   const aiScroll = useRef<HTMLDivElement>(null);
   const metricByCode = useMemo(() => new Map(initialMetrics.map((m) => [m.code, m])), [initialMetrics]);
   useEffect(() => {
@@ -540,43 +540,23 @@ export function Workshop({
     setAiBusy(true);
     const started = performance.now();
     const { state, catalog } = aiRequestContext();
-    const controller = new AbortController();
-    aiAbortRef.current = controller;
+    // A server action can't be aborted mid-flight, so "Stop" just flags the turn
+    // to be discarded when it returns.
+    const cancel = { stopped: false };
+    aiCancelRef.current = cancel;
 
-    let reply = "";
-    let command: unknown = null;
-    const streamed = await streamAiChat(
-      "worksheet",
-      { messages: history, state, catalog },
-      (partial) => partial && setLastAssistant(partial),
-      controller.signal,
-    );
-    if (controller.signal.aborted) {
-      aiAbortRef.current = null;
-      setAiBusy(false);
-      setLastAssistant("Interrupted.");
+    const res = await worksheetChat(history, state, catalog);
+    if (cancel.stopped) return; // Stop already updated the UI
+    aiCancelRef.current = null;
+    setAiBusy(false);
+    setAiStats({ seconds: (performance.now() - started) / 1000 });
+
+    if (!res.ok) {
+      setLastAssistant(res.error, true);
       return;
     }
-    if (streamed.ok) {
-      reply = (streamed.reply ?? "").trim();
-      command = streamed.command;
-    } else {
-      // Streaming unavailable — fall back to the non-streaming action.
-      const res = await worksheetChat(history, state, catalog);
-      if (!res.ok) {
-        aiAbortRef.current = null;
-        setAiBusy(false);
-        setLastAssistant(res.error, true);
-        return;
-      }
-      reply = (res.reply ?? "").trim();
-      command = res.sheet;
-    }
-    aiAbortRef.current = null;
-    setAiBusy(false);
-    const t = streamed.ok ? streamed.timings : null;
-    setAiStats({ seconds: (performance.now() - started) / 1000, tokens: t?.tokens, tokensPerSec: t?.tokensPerSec });
-
+    const reply = (res.reply ?? "").trim();
+    const command = res.sheet;
     if (command) {
       // Don't touch the table yet — show what the AI proposes and ask first.
       const looksJson = /^[[{]/.test(reply) || reply.includes('"columns"');
@@ -586,9 +566,12 @@ export function Workshop({
       setLastAssistant(reply || "(done)");
     }
   }
-  // "Stop" — cancel the in-flight request (also disconnects Ollama via the route).
+  // "Stop" — abandon the in-flight turn (its result is discarded on return).
   function stopAi() {
-    aiAbortRef.current?.abort();
+    if (aiCancelRef.current) aiCancelRef.current.stopped = true;
+    aiCancelRef.current = null;
+    setAiBusy(false);
+    setLastAssistant("Interrupted.");
   }
   // "Yes" on the apply challenge — carry out the AI's proposed change.
   function confirmSheetChange() {
