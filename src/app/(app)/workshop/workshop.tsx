@@ -16,6 +16,7 @@ import {
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { MoveDialog } from "@/components/move-dialog";
+import { TypingDots } from "@/components/typing-dots";
 import { YesNoDialog } from "@/components/yes-no-dialog";
 import { formatAiStats, streamAiChat } from "@/lib/ai/stream-client";
 import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
@@ -606,6 +607,7 @@ export function Workshop({
           "I've decided not to apply that change to my worksheet. Please respond briefly and politely, and offer to help another way. Do not change the table.",
       },
     ];
+    setAiMsgs((m) => [...m, { role: "assistant", content: "…" }]);
     setAiBusy(true);
     const { state, catalog } = aiRequestContext();
     const res = await worksheetChat(history, state, catalog);
@@ -614,7 +616,7 @@ export function Workshop({
       res.ok && (res.reply ?? "").trim()
         ? (res.reply as string).trim()
         : "No problem — tell me what you'd like to do instead.";
-    setAiMsgs((m) => [...m, { role: "assistant", content }]);
+    setLastAssistant(content);
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -1689,11 +1691,10 @@ export function Workshop({
                           : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                     }`}
                   >
-                    {m.content}
+                    {m.content === "…" ? <TypingDots /> : m.content}
                   </div>
                 </div>
               ))}
-              {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
             </div>
             {aiStats && !aiBusy && isAdmin && (
               <p className="border-t border-slate-200 px-3 py-1 text-right text-[11px] text-slate-400 dark:border-slate-800">
