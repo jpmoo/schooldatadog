@@ -73,6 +73,11 @@ export async function streamAiChat(
     return { ok: false, error: "Scout returned an empty streamed response." };
   }
   const parsed = extractJson(content);
+  // Streamed body that isn't valid JSON (e.g. a truncated "{") — fall back to the
+  // non-streaming action, which returns the whole reply in one response.
+  if (!parsed) {
+    return { ok: false, error: "Scout's streamed reply was incomplete." };
+  }
   const reply =
     parsed && typeof parsed.reply === "string"
       ? parsed.reply

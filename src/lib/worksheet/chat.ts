@@ -118,6 +118,7 @@ async function summarizeHistory(baseUrl: string, model: string, older: ChatMessa
         model,
         stream: false,
         options: { temperature: 0, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
+        think: false, // reasoning model — skip the (slow, unused) chain-of-thought
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: [
           {
@@ -193,6 +194,7 @@ export async function worksheetChat(
         stream: false,
         format: "json",
         options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_NUM_PREDICT },
+        think: false, // reasoning model — skip the (slow, unused) chain-of-thought
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: messagesForOllama,
       }),

@@ -12,15 +12,14 @@ export const OLLAMA_KEEP_ALIVE = "4h";
  * request (chat, summarize, warm-up) so Ollama doesn't reload the model when the
  * size changes.
  */
-export const OLLAMA_NUM_CTX = 16384;
+export const OLLAMA_NUM_CTX = 8192;
 
 /**
- * Cap on generated tokens. The configured model is a reasoning model that emits
- * a (hidden) chain-of-thought BEFORE the answer, so this budget must cover
- * thinking + answer — too low and the answer never gets emitted. Still a runaway
- * backstop. (A generation param, not a load param — safe to vary per call.)
+ * Cap on generated tokens. With thinking disabled (think:false on every call) a
+ * reply or sheet/chart command fits well under this; it's a runaway backstop.
+ * (A generation param, not a load param — safe to vary per call.)
  */
-export const OLLAMA_NUM_PREDICT = 8192;
+export const OLLAMA_NUM_PREDICT = 2048;
 
 /**
  * Preload the inference model into Ollama so the first real prompt is fast, and
