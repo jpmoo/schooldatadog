@@ -6,13 +6,13 @@ import { getOllamaConfig } from "@/lib/settings";
 export const OLLAMA_KEEP_ALIVE = "4h";
 
 /**
- * Context window (tokens). Ollama defaults to only 4096, which the metric
- * catalog + rules + a big command (e.g. a 6-source similarity) can exceed —
- * forcing slow context-shifting. Set generously and use the SAME value on every
- * request (chat, summarize, warm-up) so Ollama doesn't reload the model when the
- * size changes.
+ * Context window (tokens). The metric-catalog prompt alone runs ~8k tokens, so
+ * a smaller window leaves no room to generate the answer (the model emits one
+ * token and stops with done=length). Set generously — plenty of headroom on a
+ * 128GB box — and use the SAME value on every request (chat, summarize, warm-up)
+ * so Ollama doesn't reload the model when the size changes.
  */
-export const OLLAMA_NUM_CTX = 8192;
+export const OLLAMA_NUM_CTX = 32768;
 
 /**
  * Cap on generated tokens. With thinking disabled (think:false on every call) a
