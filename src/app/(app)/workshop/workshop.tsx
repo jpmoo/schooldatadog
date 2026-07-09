@@ -469,10 +469,26 @@ export function Workshop({
 
     setColumns([...dataCols, ...calcCols]); // replaces every column
     for (const col of dataCols) {
-      const vals = await getColumnValues(col.metric.code, col.year, col.subgroup);
+      let sg = col.subgroup;
+      let vals = await getColumnValues(col.metric.code, col.year, sg);
+      // Self-heal Scout's subgroup guesses: composition/share metrics (e.g. the
+      // "% of enrollment" family) are stored ONLY under "All Students", but Scout
+      // sometimes attaches a matching demographic subgroup ("Economically
+      // Disadvantaged" on demo_ecdis_pct), yielding an all-blank column. If the
+      // requested slice is empty, fall back to All Students and correct the
+      // column's subgroup so its header matches the data shown.
+      if (vals.length === 0 && sg !== ALL_STUDENTS) {
+        const fallback = await getColumnValues(col.metric.code, col.year, ALL_STUDENTS);
+        if (fallback.length > 0) {
+          vals = fallback;
+          sg = ALL_STUDENTS;
+        }
+      }
       const map: Record<number, number | null> = {};
       for (const v of vals) map[v.entityId] = v.value;
-      setColumns((cs) => cs.map((x) => (x.id === col.id ? { ...(x as DataColumn), values: map } : x)));
+      setColumns((cs) =>
+        cs.map((x) => (x.id === col.id ? { ...(x as DataColumn), subgroup: sg, values: map } : x)),
+      );
     }
     } // end if (hasCols)
 

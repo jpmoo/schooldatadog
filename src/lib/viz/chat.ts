@@ -49,6 +49,8 @@ ${catalog.years.join(", ")}
 # Subgroups (demographic breakdowns; not every metric has every subgroup)
 ${catalog.subgroups.join(", ")}
 
+IMPORTANT — composition/share metrics: any metric that is itself a demographic share (e.g. "% of enrollment" metrics like "Economically Disadvantaged (% of enrollment)", "Students with Disabilities (% of enrollment)", "English Language Learners (% of enrollment)", "% Hispanic", etc.) is a whole-district figure stored ONLY under subgroup "All Students". It is NOT broken out by subgroup — attaching a demographic subgroup (e.g. "Economically Disadvantaged") to it yields an EMPTY field. For these metrics, always use subgroup "All Students". Use demographic subgroups only on outcome metrics actually measured per group (graduation rate, test proficiency, etc.).
+
 # Saved groups (entity sets, by name)
 ${catalog.groups.length ? catalog.groups.join(", ") : "(none)"}
 
