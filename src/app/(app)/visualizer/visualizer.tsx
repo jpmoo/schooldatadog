@@ -1,9 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { View } from "vega";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
+import { MoveDialog } from "@/components/move-dialog";
+import {
+  ALL_STUDENTS,
+  type CalcColumn,
+  type SavedColumn,
+  type SavedViewState,
+} from "@/app/(app)/workshop/columns";
+import { stashForWorkshop, takeForVisualizer } from "@/lib/viz/handoff";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import type { SavedViewMeta } from "@/lib/views/queries";
@@ -101,6 +110,8 @@ export function Visualizer({
   const [rows, setRows] = useState<Row[]>([]);
   const [resolving, setResolving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [moveDialog, setMoveDialog] = useState(false);
+  const router = useRouter();
   const [showJson, setShowJson] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [jsonErr, setJsonErr] = useState<string | null>(null);
@@ -217,6 +228,14 @@ export function Visualizer({
   async function importView(v: SavedViewMeta) {
     const st = await getViewForImport(v.id);
     if (!st) return;
+    applyViewState(st, { kind: "view", id: v.id, name: v.name });
+  }
+  // Turn a workshop SavedViewState into a chart. `source` labels the entities'
+  // origin (a saved view/group); omitted for an unsaved handoff from the workshop.
+  function applyViewState(
+    st: SavedViewState,
+    source?: { kind: "group" | "view"; id: number; name: string },
+  ) {
     const hidden = new Set(st.hidden);
     const ids = entities
       .filter((e) => {
@@ -293,11 +312,72 @@ export function Visualizer({
       mark: multiYear ? "line" : "bar",
       encoding,
       data: {
-        entities: { ids, level: st.viewMode === "schools" ? "school" : st.viewMode === "both" ? "both" : "district", source: { kind: "view", id: v.id, name: v.name } },
+        entities: {
+          ids,
+          level: st.viewMode === "schools" ? "school" : st.viewMode === "both" ? "both" : "district",
+          ...(source ? { source } : {}),
+        },
         fields,
         calc,
       },
     }));
+  }
+
+  // Send the current graph's data (entities + columns + calc fields) to the Data
+  // Workshop as a sheet, carrying live state via sessionStorage (no save needed).
+  function moveToWorkshop() {
+    const level = spec.data.entities.level;
+    const viewMode: SavedViewState["viewMode"] =
+      level === "school" ? "schools" : level === "both" ? "both" : "districts";
+    const selected = new Set(spec.data.entities.ids);
+    // The workshop models a selection as viewMode + hidden, so hide every entity
+    // of this level that isn't in the chart.
+    const hidden = entities
+      .filter((e) =>
+        viewMode === "both" ? true : viewMode === "schools" ? e.type === "school" : e.type === "district",
+      )
+      .filter((e) => !selected.has(e.id))
+      .map((e) => e.id);
+
+    const columns: SavedColumn[] = [];
+    for (const f of spec.data.fields) {
+      const m = metricByCode.get(f.metric) ?? {
+        id: -1,
+        code: f.metric,
+        name: f.metricName ?? f.label ?? f.metric,
+        category: null,
+        unit: f.unit ?? null,
+        dataType: f.dataType ?? "number",
+        description: null,
+      };
+      // A single-year field keeps its id so calc source references still resolve;
+      // a multi-year field expands into one column per year.
+      for (const yr of f.years) {
+        const id = f.years.length === 1 ? f.id : `${f.id}::${yr}`;
+        columns.push({ id, kind: "data", metric: m, year: yr, subgroup: f.subgroup ?? ALL_STUDENTS });
+      }
+    }
+    for (const c of spec.data.calc) columns.push({ ...c, kind: "calc" } as CalcColumn);
+
+    const state: SavedViewState = {
+      year: spec.data.fields[0]?.years[0] ?? years[0] ?? "",
+      viewMode,
+      county: "",
+      hidden,
+      collapsed: [],
+      districtSort: [],
+      schoolSort: [],
+      groupFilter: "",
+      hideEmpty: false,
+      columns,
+    };
+    stashForWorkshop(state);
+    router.push("/workshop");
+  }
+  // Save the visualization first (if requested), then move.
+  async function saveThenMoveToWorkshop() {
+    await save();
+    moveToWorkshop();
   }
 
   // ── AI assistant ──
@@ -413,9 +493,14 @@ export function Visualizer({
   }
 
   // A fresh chart starts on "Districts only" — populate that set once on mount.
-  // If arriving via ?view=<id> (e.g. from the workshop), import that view instead.
+  // A sheet handed off from the workshop wins; then ?view=<id>; else the default.
   useEffect(() => {
     if (initialChart) return;
+    const handoff = takeForVisualizer();
+    if (handoff) {
+      applyViewState(handoff);
+      return;
+    }
     const v = importViewId != null ? views.find((x) => x.id === importViewId) : null;
     if (v) void importView(v);
     else applyBase("districts");
@@ -856,6 +941,14 @@ export function Visualizer({
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Visualization name" className={`${input} min-w-[220px] flex-1`} />
         <button onClick={save} className={iconBtn} title="Save visualization">
           <Icon name="saveViewOrGroup" />
+        </button>
+        <button
+          onClick={() => setMoveDialog(true)}
+          disabled={spec.data.fields.length === 0}
+          className={iconBtn}
+          title="Move this graph to the Data Workshop"
+        >
+          <Icon name="dataWorkshop" />
         </button>
         <IconMenu
           icon="export"
@@ -1378,6 +1471,23 @@ export function Visualizer({
           </div>
         )}
       </div>
+
+      {moveDialog && (
+        <MoveDialog
+          title="Move to the Data Workshop"
+          body="Save this visualization before moving its data to the Data Workshop?"
+          destinationIcon="dataWorkshop"
+          onSaveAndMove={() => {
+            setMoveDialog(false);
+            void saveThenMoveToWorkshop();
+          }}
+          onMoveWithoutSaving={() => {
+            setMoveDialog(false);
+            moveToWorkshop();
+          }}
+          onCancel={() => setMoveDialog(false)}
+        />
+      )}
 
       {groupSave && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setGroupSave(null)}>

@@ -15,6 +15,8 @@ import {
 } from "@dnd-kit/core";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
+import { MoveDialog } from "@/components/move-dialog";
+import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
 import { createGroup, overwriteGroup } from "@/lib/groups/actions";
 import type { GroupLite } from "@/lib/groups/queries";
 import { createView, overwriteView } from "@/lib/views/actions";
@@ -277,7 +279,10 @@ export function Workshop({
   const [confirmClear, setConfirmClear] = useState(false);
   const [viewConflict, setViewConflict] = useState<{ name: string; id: number; state: SavedViewState } | null>(null);
   const [groupConflict, setGroupConflict] = useState<{ name: string; id: number; ids: number[] } | null>(null);
-  const [savedViewPrompt, setSavedViewPrompt] = useState<{ id: number; name: string } | null>(null);
+  // "Move this sheet to the Visualizer" — the save-before-moving challenge, and a
+  // flag so a save triggered from that challenge continues on to the move.
+  const [moveDialog, setMoveDialog] = useState(false);
+  const [moveAfterSave, setMoveAfterSave] = useState(false);
   const router = useRouter();
 
   const [columns, setColumns] = useState<Column[]>([]);
@@ -1028,7 +1033,7 @@ export function Workshop({
     if (res.ok) {
       setViewName(res.view.name);
       setViewDialog(false);
-      setSavedViewPrompt({ id: res.view.id, name: res.view.name });
+      finishMoveIfPending();
       return { ok: true };
     }
     if ("conflict" in res) {
@@ -1045,18 +1050,35 @@ export function Workshop({
       mode === "overwrite" ? await overwriteView(id, state) : await createView(name, state, true);
     if (res.ok) {
       setViewName(res.view.name);
-      setSavedViewPrompt({ id: res.view.id, name: res.view.name });
+      finishMoveIfPending();
     }
     setViewConflict(null);
   }
 
-  // Restore a saved view once, when opened via /workshop?view=<id>.
+  // Send the current sheet to the Visualizer, carrying its live state (no save
+  // required). The Visualizer consumes it on mount.
+  function moveToVisualizer() {
+    stashForVisualizer(captureState());
+    router.push("/visualizer");
+  }
+  // If a save was launched from the "move to Visualizer" challenge, continue on
+  // to the move once the save succeeds.
+  function finishMoveIfPending() {
+    if (moveAfterSave) {
+      setMoveAfterSave(false);
+      moveToVisualizer();
+    }
+  }
+
+  // Restore a saved view once, when opened via /workshop?view=<id> — or load a
+  // sheet handed off from the Visualizer (takes precedence).
   const appliedView = useRef(false);
   useEffect(() => {
-    if (initialView && !appliedView.current) {
-      appliedView.current = true;
-      applyView(initialView);
-    }
+    if (appliedView.current) return;
+    appliedView.current = true;
+    const handoff = takeForWorkshop();
+    if (handoff) applyView(handoff);
+    else if (initialView) applyView(initialView);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1296,6 +1318,14 @@ export function Workshop({
               title="Save all filters, sorts & columns as a named view"
             >
               <Icon name="saveViewOrGroup" />
+            </button>
+            <button
+              onClick={() => setMoveDialog(true)}
+              disabled={columns.length === 0}
+              className={iconBtn}
+              title="Move this sheet to the Visualizer"
+            >
+              <Icon name="visualizer" />
             </button>
             <button
               onClick={() => setConfirmClear(true)}
@@ -1652,7 +1682,10 @@ export function Workshop({
           submitLabel="Save view"
           placeholder="e.g. Westchester grad-rate scan"
           onSubmit={handleSaveView}
-          onClose={() => setViewDialog(false)}
+          onClose={() => {
+            setViewDialog(false);
+            setMoveAfterSave(false);
+          }}
         />
       )}
 
@@ -1691,7 +1724,10 @@ export function Workshop({
           name={viewConflict.name}
           onOverwrite={() => resolveViewConflict("overwrite")}
           onSaveNew={() => resolveViewConflict("new")}
-          onClose={() => setViewConflict(null)}
+          onClose={() => {
+            setViewConflict(null);
+            setMoveAfterSave(false);
+          }}
         />
       )}
       {groupConflict && (
@@ -1704,31 +1740,22 @@ export function Workshop({
         />
       )}
 
-      {savedViewPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSavedViewPrompt(null)}>
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">View saved</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              “{savedViewPrompt.name}” was saved. Would you like to open it in the Visualizer?
-            </p>
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setSavedViewPrompt(null)}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <Icon name="no" className="h-4 w-4" />
-                No, stay here
-              </button>
-              <button
-                onClick={() => router.push(`/visualizer?view=${savedViewPrompt.id}`)}
-                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
-              >
-                <Icon name="apply" className="h-4 w-4" />
-                Yes, open in Visualizer
-              </button>
-            </div>
-          </div>
-        </div>
+      {moveDialog && (
+        <MoveDialog
+          title="Move to the Visualizer"
+          body="Save this sheet as a named view before moving it to the Visualizer?"
+          destinationIcon="visualizer"
+          onSaveAndMove={() => {
+            setMoveDialog(false);
+            setMoveAfterSave(true);
+            setViewDialog(true);
+          }}
+          onMoveWithoutSaving={() => {
+            setMoveDialog(false);
+            moveToVisualizer();
+          }}
+          onCancel={() => setMoveDialog(false)}
+        />
       )}
     </>
   );
