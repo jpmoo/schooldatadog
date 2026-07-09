@@ -5,7 +5,7 @@
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { getOllamaConfig } from "@/lib/settings";
-import { OLLAMA_KEEP_ALIVE } from "@/lib/ollama/warm";
+import { OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX } from "@/lib/ollama/warm";
 import { buildWorksheetMessages, type ChatMessage, type SheetCatalog } from "@/lib/worksheet/chat";
 import { buildVisualizerMessages, type VizCatalog } from "@/lib/viz/chat";
 
@@ -42,7 +42,7 @@ export async function POST(req: Request): Promise<Response> {
         model,
         stream: true,
         format: "json",
-        options: { temperature: 0.2 },
+        options: { temperature: 0.2, num_ctx: OLLAMA_NUM_CTX },
         keep_alive: OLLAMA_KEEP_ALIVE,
         messages: messagesForOllama,
       }),
@@ -106,6 +106,11 @@ export async function POST(req: Request): Promise<Response> {
   });
 
   return new Response(stream, {
-    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+      // Ask reverse proxies (nginx/Caddy) not to buffer, so tokens arrive live.
+      "x-accel-buffering": "no",
+    },
   });
 }

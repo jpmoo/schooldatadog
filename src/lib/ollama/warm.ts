@@ -6,6 +6,15 @@ import { getOllamaConfig } from "@/lib/settings";
 export const OLLAMA_KEEP_ALIVE = "4h";
 
 /**
+ * Context window (tokens). Ollama defaults to only 4096, which the metric
+ * catalog + rules + a big command (e.g. a 6-source similarity) can exceed —
+ * forcing slow context-shifting. Set generously and use the SAME value on every
+ * request (chat, summarize, warm-up) so Ollama doesn't reload the model when the
+ * size changes.
+ */
+export const OLLAMA_NUM_CTX = 8192;
+
+/**
  * Preload the inference model into Ollama so the first real prompt is fast, and
  * set a long idle keep-alive. Best-effort and non-blocking — a slow/absent
  * Ollama must never affect the caller (e.g. login).
@@ -18,7 +27,9 @@ export async function warmOllama(): Promise<void> {
     await fetch(`${baseUrl}/api/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model, keep_alive: OLLAMA_KEEP_ALIVE }),
+      // Load at the same context size chat uses, so the first real prompt
+      // doesn't trigger a reload.
+      body: JSON.stringify({ model, keep_alive: OLLAMA_KEEP_ALIVE, options: { num_ctx: OLLAMA_NUM_CTX } }),
       cache: "no-store",
     });
   } catch {
