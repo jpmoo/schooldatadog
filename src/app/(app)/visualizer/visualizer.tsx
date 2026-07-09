@@ -1491,6 +1491,11 @@ export function Visualizer({
         >
           <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">Scout</span>
           <span className="flex-1">Ask Scout to build or explain this chart</span>
+          {isAdmin && (
+            <span className="font-mono text-[10px] text-slate-400" title="Deployed build">
+              {process.env.NEXT_PUBLIC_BUILD}
+            </span>
+          )}
           <span className="text-slate-400">{aiOpen ? "▼" : "▲"}</span>
         </button>
         {aiOpen && (

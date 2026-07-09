@@ -2,7 +2,22 @@
 // at build time. basePath is inlined into the client bundle at build, so it must
 // be set before `next build`.
 import "dotenv/config";
+import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+
+/** The git commit this build was made from — surfaced in the UI so it's obvious
+ *  at a glance which version is actually deployed. */
+function buildId(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 /**
  * Sub-path to serve the app under, e.g. "/schooldatadog" when reverse-proxied
@@ -23,7 +38,7 @@ const nextConfig: NextConfig = {
   basePath,
   // Exposed to the browser so client-side fetch() to our route handlers can
   // include the basePath prefix (Next only auto-prefixes router/Link URLs).
-  env: { NEXT_PUBLIC_BASE_PATH: basePath ?? "" },
+  env: { NEXT_PUBLIC_BASE_PATH: basePath ?? "", NEXT_PUBLIC_BUILD: buildId() },
 };
 
 export default nextConfig;
