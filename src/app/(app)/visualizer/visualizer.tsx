@@ -1094,7 +1094,14 @@ export function Visualizer({
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fields</p>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Title</span>
-            <input value={spec.title ?? ""} onChange={(e) => setSpec((s) => ({ ...s, title: e.target.value || undefined }))} className={`${input} w-full`} />
+            <input
+              value={spec.title ?? provenance?.name ?? ""}
+              onChange={(e) => setSpec((s) => ({ ...s, title: e.target.value || undefined }))}
+              placeholder="Chart title"
+              className={`${input} w-full`}
+              style={{ color: spec.title == null && provenance?.name ? "#94a3b8" : undefined }}
+              title={spec.title == null && provenance?.name ? "Default title (edit to override)" : "Chart title"}
+            />
           </label>
           {PRIMARY_CHANNELS.map(({ ch, label, hint }) => {
             const def = spec.encoding?.[ch];

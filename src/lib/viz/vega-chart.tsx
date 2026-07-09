@@ -257,6 +257,9 @@ function toVegaLite(
   const base = { mark, encoding };
   const chartLayer = labelLayers.length ? { layer: [base, ...labelLayers] } : base;
 
+  // A saved group/view's name is the default chart title (a custom title wins).
+  const chartTitle = spec.title ?? spec.data.entities.source?.name;
+
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",
     // Faceted charts size to their content, so let them use their natural size
@@ -264,7 +267,7 @@ function toVegaLite(
     ...(faceted ? {} : { width, height }),
     autosize: { type: "fit", contains: "padding" },
     background: "transparent",
-    ...(spec.title ? { title: spec.title } : {}),
+    ...(chartTitle ? { title: chartTitle } : {}),
     data: { values: rows },
     ...(spec.transform || extraTransform.length
       ? { transform: [...(spec.transform ?? []), ...extraTransform] }
