@@ -80,6 +80,7 @@ export function Visualizer({
   initialChart,
   homeDistrictId,
   importViewId = null,
+  isAdmin,
 }: {
   years: string[];
   entities: WorkshopEntity[];
@@ -90,6 +91,7 @@ export function Visualizer({
   initialChart: { id: number; name: string; spec: ChartSpec } | null;
   homeDistrictId: number | null;
   importViewId?: number | null;
+  isAdmin: boolean;
 }) {
   const entitiesById = useMemo(() => new Map(entities.map((e) => [e.id, e])), [entities]);
   const demoSet = useMemo(() => new Set(demographicMetrics), [demographicMetrics]);
@@ -1515,7 +1517,7 @@ export function Visualizer({
               ))}
               {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
             </div>
-            {aiStats && !aiBusy && (
+            {aiStats && !aiBusy && isAdmin && (
               <p className="border-t border-slate-200 px-3 py-1 text-right text-[11px] text-slate-400 dark:border-slate-800">
                 {formatAiStats(aiStats)}
               </p>

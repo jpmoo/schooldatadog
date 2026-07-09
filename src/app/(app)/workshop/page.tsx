@@ -50,6 +50,7 @@ export default async function WorkshopPage({
       initialView={saved?.state ?? null}
       initialViewName={saved?.name ?? null}
       homeDistrictId={me?.homeDistrictId ?? null}
+      isAdmin={user.role === "admin"}
     />
   );
 }

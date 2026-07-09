@@ -14,6 +14,9 @@ export type StreamAiResult =
 // The route handler appends the timing JSON after this separator.
 const STATS_SEP = "\x1e";
 
+// Keys that signal the model is emitting a sheet/chart command (not prose).
+const COMMAND_KEY_RE = /"(sheet|columns|chart|fields|encoding)"\s*:/;
+
 /** "12.3 tok/s · 240 tokens · 3.9s" — a compact readout for the AI panel. */
 export function formatAiStats(s: { seconds: number; tokens?: number; tokensPerSec?: number }): string {
   const parts: string[] = [];
@@ -29,6 +32,10 @@ export async function streamAiChat(
   onReply: (partialReply: string) => void,
 ): Promise<StreamAiResult> {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  // Once the model starts emitting the structured command, show a status instead
+  // of leaking JSON into the chat.
+  const buildingMsg =
+    kind === "worksheet" ? "Building the table…" : "Building the visualization…";
   let raw = "";
   try {
     const res = await fetch(`${basePath}/api/ai/chat`, {
@@ -45,8 +52,12 @@ export async function streamAiChat(
       const { value, done } = await reader.read();
       if (done) break;
       raw += decoder.decode(value, { stream: true });
-      // The reply is everything before the stats separator.
-      onReply(extractReplyText(raw.split(STATS_SEP)[0]));
+      const content = raw.split(STATS_SEP)[0];
+      const replyText = extractReplyText(content);
+      // A command key (or a reply that itself looks like JSON) means we're
+      // building — never render the raw JSON, show the status instead.
+      const building = COMMAND_KEY_RE.test(content) || /^\s*[[{]/.test(replyText);
+      onReply(building ? buildingMsg : replyText);
     }
   } catch {
     return { ok: false, error: "Couldn't reach the AI server." };

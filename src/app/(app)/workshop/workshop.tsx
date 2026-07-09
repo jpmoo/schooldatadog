@@ -248,6 +248,7 @@ export function Workshop({
   initialView,
   initialViewName,
   homeDistrictId,
+  isAdmin,
 }: {
   years: string[];
   counties: string[];
@@ -258,6 +259,7 @@ export function Workshop({
   initialView: SavedViewState | null;
   initialViewName: string | null;
   homeDistrictId: number | null;
+  isAdmin: boolean;
 }) {
   const demographicSet = useMemo(() => new Set(demographicMetrics), [demographicMetrics]);
   const [year, setYear] = useState(years[0] ?? "");
@@ -1676,7 +1678,7 @@ export function Workshop({
               ))}
               {aiBusy && <p className="text-sm text-slate-400">Thinking…</p>}
             </div>
-            {aiStats && !aiBusy && (
+            {aiStats && !aiBusy && isAdmin && (
               <p className="border-t border-slate-200 px-3 py-1 text-right text-[11px] text-slate-400 dark:border-slate-800">
                 {formatAiStats(aiStats)}
               </p>

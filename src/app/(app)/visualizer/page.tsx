@@ -41,6 +41,7 @@ export default async function VisualizerPage({
       initialChart={saved}
       homeDistrictId={me[0]?.homeDistrictId ?? null}
       importViewId={importViewId}
+      isAdmin={user.role === "admin"}
     />
   );
 }
