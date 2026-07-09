@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { View } from "vega";
 import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
+import { Markdown } from "@/components/markdown";
 import { MoveDialog } from "@/components/move-dialog";
 import { TypingDots } from "@/components/typing-dots";
 import { YesNoDialog } from "@/components/yes-no-dialog";
@@ -1518,7 +1519,13 @@ export function Visualizer({
                           : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                     }`}
                   >
-                    {m.content === "…" ? <TypingDots /> : m.content}
+                    {m.content === "…" ? (
+                      <TypingDots />
+                    ) : m.role === "assistant" && !m.error ? (
+                      <Markdown text={m.content} />
+                    ) : (
+                      m.content
+                    )}
                   </div>
                 </div>
               ))}
