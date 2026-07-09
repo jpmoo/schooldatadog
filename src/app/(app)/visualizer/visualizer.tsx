@@ -72,6 +72,25 @@ const nat = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: t
 let seq = 0;
 const newId = (p: string) => `${p}${++seq}_${Math.round(performance.now())}`;
 
+// Clean the AI's reference-line list into well-formed entries (drops any without
+// a position — an explicit value or an aggregate).
+const REF_AGGS = ["mean", "median", "min", "max"] as const;
+function sanitizeRefLines(raw: unknown[]): ChartSpec["refLines"] {
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+    .map((r) => ({
+      axis: r.axis === "x" ? ("x" as const) : ("y" as const),
+      value: typeof r.value === "number" ? r.value : null,
+      aggregate: REF_AGGS.includes(r.aggregate as (typeof REF_AGGS)[number])
+        ? (r.aggregate as (typeof REF_AGGS)[number])
+        : null,
+      field: typeof r.field === "string" ? r.field : null,
+      label: typeof r.label === "string" ? r.label : null,
+      color: typeof r.color === "string" ? r.color : null,
+    }))
+    .filter((r) => r.value !== null || r.aggregate !== null);
+}
+
 export function Visualizer({
   years,
   entities,
@@ -466,6 +485,7 @@ export function Visualizer({
       title: typeof c.title === "string" ? c.title : s.title,
       theme: c.theme === "app" || c.theme === "print" ? c.theme : s.theme,
       showLegend: typeof c.showLegend === "boolean" ? c.showLegend : s.showLegend,
+      refLines: Array.isArray(c.refLines) ? sanitizeRefLines(c.refLines) : s.refLines,
     };
   }
 

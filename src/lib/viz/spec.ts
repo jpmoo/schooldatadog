@@ -85,6 +85,17 @@ export const chatMessageSchema = z.object({
 });
 export type ChatMessageSpec = z.infer<typeof chatMessageSchema>;
 
+/** A guide line across the plot: at an explicit value, or an aggregate of a field. */
+export const refLineSchema = z.object({
+  axis: z.enum(["x", "y"]).default("y"), // which axis the line crosses
+  value: z.number().nullish(), // explicit position, OR
+  aggregate: z.enum(["mean", "median", "min", "max"]).nullish(), // computed from a field
+  field: z.string().nullish(), // field id for the aggregate (defaults to the axis's field)
+  label: z.string().nullish(),
+  color: z.string().nullish(),
+});
+export type RefLine = z.infer<typeof refLineSchema>;
+
 export const chartSpecSchema = z.object({
   version: z.literal(1),
   title: z.string().optional(),
@@ -108,6 +119,9 @@ export const chartSpecSchema = z.object({
       size: z.number().optional(), // fixed marker size in px (when Bubble size = Standard)
     })
     .optional(),
+  // Reference/guide lines drawn across the plot (e.g. a target value, or the
+  // average of a field). Rendered as dashed rule marks by VegaChart.
+  refLines: z.array(refLineSchema).optional(),
   // The AI conversation that built this chart, persisted so it restores on load.
   chat: z.array(chatMessageSchema).optional(),
 });

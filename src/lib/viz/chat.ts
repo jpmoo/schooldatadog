@@ -72,7 +72,8 @@ A "chart" object looks like:
   "encoding": { "x": {"field":"<ref>","type":"nominal|ordinal|quantitative|temporal"}, "y": {...}, "color": {...}, "column": {...} },
   "title": "Chart title",
   "showLegend": true | false,   // optional — hide the colour/size legend
-  "theme": "app" | "print"       // optional — colour palette
+  "theme": "app" | "print",      // optional — colour palette
+  "refLines": [ { "axis": "y", "aggregate": "mean", "field": "<field id>", "label": "Average" } ]  // optional — dashed guide lines
 }
 Return the FULL chart object each time you change anything — include every field, entity, encoding channel, and setting you want, because it REPLACES the current chart. Don't send a partial chart expecting the rest to stay.
 Rules:
@@ -87,6 +88,7 @@ Rules:
   Keep any existing color encoding as-is. This works on every chart type (their bar/bin/point stays fully opaque while the rest dim). So you CAN highlight the user's district — do it this way, not by recolouring.
 - For a histogram: x = a field with {"bin": true}, y = {"aggregate": "count"}, mark "bar".
 - "entities":"keep" leaves the current entity set unchanged (this is the default when entities are already selected).
+- "refLines" (optional) draws dashed guide lines across the plot — a benchmark or average. Each: "axis" ("y" = horizontal line, "x" = vertical), then EITHER "value": <number> for a fixed line, OR "aggregate": "mean"|"median"|"min"|"max" with "field": <a field id> to compute it from the shown data. Give a short "label". You CAN do this — offer a reference line when an average or target would help (e.g. "add a line at the state average" → refLines with aggregate "mean" on the value field). Send "refLines": [] to remove them. Do NOT offer free-form text callouts, trend lines, or shaded regions — only these guide lines are supported.
 Keep charts readable. Output ONLY the JSON object, no prose outside it.`;
 }
 

@@ -262,8 +262,60 @@ function toVegaLite(
     }
   }
 
+  // Reference lines: a dashed rule at an explicit value or a computed aggregate
+  // of a field, with an optional label pinned to the axis edge.
+  const refLineLayers: Record<string, unknown>[] = [];
+  if (!faceted) {
+    const aggregate = (kind: string, nums: number[]): number => {
+      if (kind === "min") return Math.min(...nums);
+      if (kind === "max") return Math.max(...nums);
+      if (kind === "median") {
+        const s = [...nums].sort((a, b) => a - b);
+        const mid = Math.floor(s.length / 2);
+        return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+      }
+      return nums.reduce((a, b) => a + b, 0) / nums.length; // mean
+    };
+    const encRec = encoding as Record<string, unknown>;
+    for (const r of spec.refLines ?? []) {
+      const axis = r.axis === "x" ? "x" : "y";
+      const color = typeof r.color === "string" ? r.color : "#64748b";
+      let pos: number | null = typeof r.value === "number" ? r.value : null;
+      if (pos === null && r.aggregate) {
+        const axisField = (encRec[axis] as Record<string, unknown> | undefined)?.field;
+        const field = typeof r.field === "string" ? r.field : typeof axisField === "string" ? axisField : undefined;
+        if (field) {
+          const nums = rows.map((row) => row[field]).filter((v): v is number => typeof v === "number");
+          if (nums.length) pos = aggregate(r.aggregate, nums);
+        }
+      }
+      if (pos === null) continue;
+      const posEnc = { datum: pos, type: "quantitative" };
+      refLineLayers.push({
+        mark: { type: "rule", stroke: color, strokeDash: [4, 4], strokeWidth: 1.5 },
+        encoding: { [axis]: posEnc },
+      });
+      if (typeof r.label === "string" && r.label) {
+        const cross = axis === "y" ? "x" : "y";
+        refLineLayers.push({
+          mark: {
+            type: "text",
+            color,
+            fontSize: 10,
+            align: axis === "y" ? "left" : "center",
+            baseline: axis === "y" ? "bottom" : "top",
+            dx: axis === "y" ? 4 : 0,
+            dy: axis === "y" ? -2 : 2,
+          },
+          encoding: { [axis]: posEnc, [cross]: { value: 3 }, text: { value: r.label } },
+        });
+      }
+    }
+  }
+
   const base = { mark, encoding };
-  const chartLayer = labelLayers.length ? { layer: [base, ...labelLayers] } : base;
+  const extraLayers = [...refLineLayers, ...labelLayers];
+  const chartLayer = extraLayers.length ? { layer: [base, ...extraLayers] } : base;
 
   // A saved group/view's name is the default chart title (a custom title wins).
   const chartTitle = spec.title ?? spec.data.entities.source?.name;
