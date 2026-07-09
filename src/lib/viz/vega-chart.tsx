@@ -244,14 +244,38 @@ function toVegaLite(
     }
   } else if (markStr === "line") {
     const { bubble, shape, filled, size } = bubbleStyle();
+    // A line only draws a segment where a series has 2+ points. A single-year
+    // cross-entity "line" (x = entity, colour = entity) gives every series one
+    // point, so the whole chart is blank. Detect that and force points on, so the
+    // data still shows (as dots) instead of an empty plot.
+    const fieldOf = (ch: string) => {
+      const f = (enc[ch] as Record<string, unknown> | undefined)?.field;
+      return typeof f === "string" ? f : undefined;
+    };
+    const xField = fieldOf("x");
+    const yField = fieldOf("y");
+    const seriesField = fieldOf("color") ?? fieldOf("detail") ?? fieldOf("strokeDash");
+    let maxPerSeries = Infinity;
+    if (xField && yField) {
+      const perSeries = new Map<string, Set<unknown>>();
+      for (const r of rows) {
+        if (r[yField] == null) continue;
+        const k = seriesField ? String(r[seriesField]) : "_all";
+        (perSeries.get(k) ?? perSeries.set(k, new Set()).get(k)!).add(r[xField]);
+      }
+      maxPerSeries = perSeries.size ? Math.max(...[...perSeries.values()].map((s) => s.size)) : 0;
+    }
+    const forcePoints = maxPerSeries < 2; // the line would be invisible
     const point =
-      bubble === "none" || bubble === ""
+      bubble === "none"
         ? false
-        : {
-            ...(shape ? { shape } : {}),
-            ...(filled !== undefined ? { filled } : {}),
-            ...(size !== undefined ? { size } : {}),
-          };
+        : bubble === "" && !forcePoints
+          ? false
+          : {
+              ...(shape ? { shape } : {}),
+              ...(filled !== undefined ? { filled } : {}),
+              ...(size !== undefined ? { size } : {}),
+            };
     mark = { type: "line", point };
   }
 
