@@ -1083,6 +1083,7 @@ export function Visualizer({
         />
         <button
           onClick={() => setShowClear(true)}
+          disabled={spec.data.fields.length === 0 && spec.data.entities.ids.length === 0 && aiMsgs.length === 0 && !name}
           className={`${iconBtn} text-slate-500 hover:text-red-600`}
           title="Clear the chart and Scout conversation (start fresh)"
         >
