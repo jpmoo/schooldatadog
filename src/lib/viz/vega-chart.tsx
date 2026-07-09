@@ -64,6 +64,18 @@ function toVegaLite(
   // Only bar/area anchor their value axis at 0; scatter/line use the data range.
   const zeroBased = markStr === "bar" || markStr === "area";
 
+  // A positional axis carrying a continuous numeric value — a data field, or an
+  // explicit quantitative type. The AI often omits the type (Vega infers it), so
+  // we must NOT require an explicit "quantitative" or the axis controls/zero
+  // handling silently no-op. Built-in categorical columns and binned axes aren't.
+  const CATEGORICAL = new Set(["entityName", "county", "entityType", "year", "homeDistrict"]);
+  const isValueAxis = (d: Record<string, unknown>): boolean => {
+    if ("bin" in d) return false;
+    if (d.type === "nominal" || d.type === "ordinal" || d.type === "temporal") return false;
+    if (d.type === "quantitative") return true;
+    return typeof d.field === "string" && !CATEGORICAL.has(d.field);
+  };
+
   // Resolve our custom axis controls (axisMin/axisMax/interval) on a plain
   // quantitative x/y axis into a scale domain + explicit, evenly-spaced ticks.
   type AxisMeta = { lo?: number; hi?: number; interval: number; dMin?: number; dMax?: number };
@@ -71,7 +83,7 @@ function toVegaLite(
   if (!faceted) {
     for (const ax of ["x", "y"] as const) {
       const d = (enc[ax] ?? {}) as Record<string, unknown>;
-      if (d.type !== "quantitative" || "bin" in d) continue;
+      if (!isValueAxis(d)) continue;
       const dMin = typeof d.axisMin === "number" ? d.axisMin : undefined;
       const dMax = typeof d.axisMax === "number" ? d.axisMax : undefined;
       const interval = typeof d.interval === "number" ? d.interval : 0;
@@ -119,8 +131,8 @@ function toVegaLite(
         // Vega-Lite includes zero on quantitative scales by default, which stretches
         // a line/scatter/point axis down to 0 even when the data sits far above it
         // (e.g. values 438–500 rendered from 0). Opt out so these marks use the data
-        // range; bar/area still anchor at 0 (zeroBased).
-        if (!zeroBased) {
+        // range; bar/area still anchor at 0 (zeroBased), and count axes keep zero.
+        if (!zeroBased && typeof d.field === "string" && !("aggregate" in d)) {
           scale = scale ?? {};
           if (scale.zero === undefined) scale.zero = false;
         }
