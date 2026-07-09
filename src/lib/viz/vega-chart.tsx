@@ -96,7 +96,14 @@ function toVegaLite(
   const encoding = Object.fromEntries(
     Object.entries(enc).map(([ch, def]) => {
       const d = (def ?? {}) as Record<string, unknown>;
-      const friendly = typeof d.field === "string" ? labels[d.field] : undefined;
+      // A field's friendly name, or "Count" for an aggregate-count axis (so it
+      // reads "Count" rather than Vega's default "Count of Records").
+      const friendly =
+        typeof d.field === "string"
+          ? labels[d.field]
+          : d.aggregate === "count"
+            ? "Count"
+            : undefined;
       // Strip our own keys; they're never valid Vega-Lite channel properties.
       const rest = { ...d };
       delete rest.axisMin;

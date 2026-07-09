@@ -491,7 +491,16 @@ export function Visualizer({
   const setChannel = (ch: string, field: string) =>
     setSpec((s) => {
       const enc = { ...(s.encoding ?? {}) };
-      if (!field) delete enc[ch];
+      if (field === "__count__") {
+        // A positional axis with no data field counts the records. Make it an
+        // explicit aggregate so it carries an editable title (default "Count").
+        const prev = enc[ch] as Record<string, unknown> | undefined;
+        enc[ch] = {
+          aggregate: "count",
+          type: "quantitative",
+          ...(typeof prev?.title === "string" ? { title: prev.title } : {}),
+        };
+      } else if (!field) delete enc[ch];
       else {
         const isField = columns.find((c) => c.id === field)?.kind === "field";
         // Preserve binning when swapping the field on a histogram's axis.
@@ -513,8 +522,14 @@ export function Visualizer({
   const setChannelTitle = (ch: string, title: string) =>
     setSpec((s) => {
       const cur = s.encoding?.[ch];
-      if (!cur) return s;
       const enc = { ...(s.encoding ?? {}) };
+      if (!cur) {
+        // An empty positional axis is an implicit count; titling it makes the
+        // count explicit so the label sticks. Nothing to title elsewhere.
+        if ((ch !== "x" && ch !== "y") || !title) return s;
+        enc[ch] = { aggregate: "count", type: "quantitative", title };
+        return { ...s, encoding: enc };
+      }
       const next = { ...cur };
       if (title) next.title = title;
       else delete next.title;
@@ -1080,21 +1095,31 @@ export function Visualizer({
           </label>
           {PRIMARY_CHANNELS.map(({ ch, label, hint }) => {
             const def = spec.encoding?.[ch];
+            // The x/y axes are always a measure: a data field or a record count —
+            // never truly "none". An empty axis means "Count".
+            const isAxis = ch === "x" || ch === "y";
+            const selectValue = def?.field ?? (isAxis ? "__count__" : "");
+            const showTitle = !!def?.field || isAxis;
+            const defaultLabel = def?.field ? (axisLabels[def.field] ?? def.field) : "Count";
             return (
               <label key={ch} className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-slate-600 dark:text-slate-300">{label}</span>
-                <select value={def?.field ?? ""} onChange={(e) => setChannel(ch, e.target.value)} className={`${input} w-full`}>
-                  <option value="">— none —</option>
+                <select value={selectValue} onChange={(e) => setChannel(ch, e.target.value)} className={`${input} w-full`}>
+                  {isAxis ? (
+                    <option value="__count__">Count (number of records)</option>
+                  ) : (
+                    <option value="">— none —</option>
+                  )}
                   {columns.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
                 </select>
                 <SortSelect ch={ch} />
-                {def?.field ? (
+                {showTitle ? (
                   <input
-                    value={(def.title as string | undefined) ?? axisLabels[def.field] ?? def.field}
+                    value={(def?.title as string | undefined) ?? defaultLabel}
                     onChange={(e) => setChannelTitle(ch, e.target.value)}
                     className={`${input} w-full text-xs`}
-                    style={{ color: def.title == null ? "#94a3b8" : undefined }}
-                    title={def.title == null ? "Default label (edit to override)" : "Axis / legend label"}
+                    style={{ color: def?.title == null ? "#94a3b8" : undefined }}
+                    title={def?.title == null ? "Default label (edit to override)" : "Axis / legend label"}
                   />
                 ) : (
                   hint && <span className="text-[11px] text-slate-400">{hint}</span>
