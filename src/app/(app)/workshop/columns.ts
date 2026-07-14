@@ -91,7 +91,9 @@ export type SavedColumn = SavedDataColumn | CalcColumn;
 export type SavedViewState = {
   year: string;
   viewMode: "districts" | "both" | "schools";
-  county: string;
+  // Selected counties (empty = all). Legacy saved views stored a single string;
+  // read those with coerceCounties().
+  county: string[];
   hidden: number[];
   collapsed: number[];
   districtSort: SortKey[];
@@ -100,6 +102,12 @@ export type SavedViewState = {
   columns: SavedColumn[];
   hideEmpty?: boolean;
 };
+
+/** Read a persisted county filter (legacy single string, or the new array). */
+export function coerceCounties(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.filter((c): c is string => typeof c === "string" && c !== "");
+  return typeof raw === "string" && raw ? [raw] : [];
+}
 
 function dataVal(col: DataColumn, entityId: number): number | null {
   const v = col.values[entityId];

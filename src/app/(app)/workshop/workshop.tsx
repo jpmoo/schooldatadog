@@ -18,6 +18,7 @@ import { IconMenu } from "@/components/icon-menu";
 import { Markdown } from "@/components/markdown";
 import { MoveDialog } from "@/components/move-dialog";
 import { TypingDots } from "@/components/typing-dots";
+import { MultiSelect } from "@/components/multi-select";
 import { YesNoDialog } from "@/components/yes-no-dialog";
 import { formatAiStats } from "@/lib/ai/stream-client";
 import { stashForVisualizer, takeForWorkshop } from "@/lib/viz/handoff";
@@ -33,6 +34,7 @@ import {
   ALL_STUDENTS,
   CALC_LABELS,
   WEIGHTED_CALCS,
+  coerceCounties,
   compareBySortKeys,
   computeCalc,
   formatCalc,
@@ -270,7 +272,7 @@ export function Workshop({
   const [isSearching, startSearch] = useTransition();
 
   const [viewMode, setViewMode] = useState<ViewMode>("districts");
-  const [county, setCounty] = useState("");
+  const [county, setCounty] = useState<string[]>([]);
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [entityPanel, setEntityPanel] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -336,7 +338,7 @@ export function Workshop({
     if (!sheet || typeof sheet !== "object") return;
     const s = sheet as Record<string, unknown>;
     if (s.viewMode === "districts" || s.viewMode === "schools" || s.viewMode === "both") setViewMode(s.viewMode);
-    if (typeof s.county === "string" && s.county !== "keep") setCounty(s.county === "all" ? "" : s.county);
+    if (typeof s.county === "string" && s.county !== "keep") setCounty(s.county === "all" ? [] : [s.county]);
     if (typeof s.group === "string" && s.group !== "keep") {
       if (s.group === "none") applyGroup("");
       else {
@@ -524,7 +526,9 @@ export function Workshop({
     columns.forEach((c, i) => c.kind === "data" && handleOf.set(c.id, `c${i + 1}`));
     const state = {
       viewMode,
-      county: county || "all",
+      // Scout's protocol takes a single county; report one when exactly one is
+      // filtered, otherwise "all" (a multi-county filter reads as unfiltered).
+      county: county.length === 1 ? county[0] : "all",
       group: groups.find((g) => String(g.id) === groupFilter)?.name ?? null,
       columns: columns
         .filter((c): c is DataColumn => c.kind === "data")
@@ -661,7 +665,7 @@ export function Workshop({
       entities.filter((e) => {
         if (viewMode === "districts" && e.type !== "district") return false;
         if (viewMode === "schools" && e.type !== "school") return false;
-        if (county && e.county !== county) return false;
+        if (county.length && !county.includes(e.county ?? "")) return false;
         if (hidden.has(e.id)) return false;
         return true;
       }),
@@ -943,7 +947,7 @@ export function Workshop({
     if (homeDistrictId == null) return;
     const home = entities.find((e) => e.id === homeDistrictId);
     if (!home) return;
-    if (county && home.county !== county) setCounty(""); // reveal it
+    if (county.length && !county.includes(home.county ?? "")) setCounty([]); // reveal it
     if (hidden.has(homeDistrictId)) {
       const n = new Set(hidden);
       n.delete(homeDistrictId);
@@ -961,7 +965,7 @@ export function Workshop({
     if (homeDistrictId == null) return;
     const homeSchools = rows.filter((r) => r.entity.parentDistrictId === homeDistrictId);
     if (homeSchools.length === 0) {
-      if (county) setCounty(""); // reveal them; click again to start cycling
+      if (county.length) setCounty([]); // reveal them; click again to start cycling
       return;
     }
     const idx = homeCycleRef.current % homeSchools.length;
@@ -1082,7 +1086,7 @@ export function Workshop({
   function applyView(v: SavedViewState) {
     setYear(v.year);
     setViewMode(v.viewMode);
-    setCounty(v.county);
+    setCounty(coerceCounties(v.county));
     setHidden(new Set(v.hidden));
     setCollapsed(new Set(v.collapsed));
     setDistrictSort(v.districtSort);
@@ -1114,7 +1118,7 @@ export function Workshop({
     setHidden(new Set());
     setCollapsed(new Set());
     setSelected(new Set());
-    setCounty("");
+    setCounty([]);
     setGroupFilter("");
     setViewMode("districts");
     setHideEmpty(false);
@@ -1379,14 +1383,19 @@ export function Workshop({
               <option value="schools">Schools only</option>
               <option value="both">Districts &amp; schools</option>
             </select>
-            <select value={county} onChange={(e) => setCounty(e.target.value)} className={btn}>
-              <option value="">All counties</option>
-              {counties.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={counties}
+              selected={county}
+              onChange={setCounty}
+              allLabel="All counties"
+              pluralNoun="counties"
+              searchPlaceholder="Search counties…"
+              title="Filter by county"
+              className={btn}
+            />
+            <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
+              Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
+            </button>
             <select
               value={groupFilter}
               onChange={(e) => applyGroup(e.target.value)}
@@ -1400,9 +1409,6 @@ export function Workshop({
                 </option>
               ))}
             </select>
-            <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
-              Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
-            </button>
             <button
               onClick={() => setHideEmpty((v) => !v)}
               aria-pressed={hideEmpty}
@@ -1442,7 +1448,7 @@ export function Workshop({
             </button>
             <button
               onClick={() => setConfirmClear(true)}
-              disabled={columns.length === 0 && districtSort.length === 0 && schoolSort.length === 0 && hidden.size === 0 && !county && !groupFilter && aiMsgs.length === 0}
+              disabled={columns.length === 0 && districtSort.length === 0 && schoolSort.length === 0 && hidden.size === 0 && county.length === 0 && !groupFilter && aiMsgs.length === 0}
               className={iconBtn}
               title="Clear the table, filters, and the Scout conversation (start fresh)"
             >
@@ -2291,7 +2297,7 @@ function EntityPanel({
   onClose,
 }: {
   entities: WorkshopEntity[];
-  county: string;
+  county: string[];
   hidden: Set<number>;
   setHidden: (s: Set<number>) => void;
   onClose: () => void;
@@ -2301,7 +2307,7 @@ function EntityPanel({
   const list = entities
     .filter(
       (e) =>
-        (!county || e.county === county) &&
+        (county.length === 0 || county.includes(e.county ?? "")) &&
         (!needle || e.name.toLowerCase().includes(needle)),
     )
     // Shown (selected) entities float to the top, each group alphabetical.

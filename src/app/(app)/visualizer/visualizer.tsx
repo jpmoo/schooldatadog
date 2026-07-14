@@ -7,11 +7,13 @@ import { Icon } from "@/components/icon";
 import { IconMenu } from "@/components/icon-menu";
 import { Markdown } from "@/components/markdown";
 import { MoveDialog } from "@/components/move-dialog";
+import { MultiSelect } from "@/components/multi-select";
 import { TypingDots } from "@/components/typing-dots";
 import { YesNoDialog } from "@/components/yes-no-dialog";
 import { formatAiStats } from "@/lib/ai/stream-client";
 import {
   ALL_STUDENTS,
+  coerceCounties,
   type CalcColumn,
   type SavedColumn,
   type SavedViewState,
@@ -173,7 +175,7 @@ export function Visualizer({
   // entity source / panel
   const [entScope, setEntScope] = useState<"district" | "school" | "mixed">("district");
   const [entType, setEntType] = useState<"districts" | "schools" | "both">("districts");
-  const [county, setCounty] = useState("");
+  const [county, setCounty] = useState<string[]>([]);
   const [entOpen, setEntOpen] = useState(false);
   const [entSearch, setEntSearch] = useState("");
   const idSet = useMemo(() => new Set(spec.data.entities.ids), [spec.data.entities.ids]);
@@ -184,13 +186,13 @@ export function Visualizer({
       data: { ...s.data, entities: { ids, level: level ?? s.data.entities.level, source } },
     }));
   }
-  function applyBase(base: "districts" | "schools" | "both", c = county) {
+  function applyBase(base: "districts" | "schools" | "both", c: string[] = county) {
     const type = base === "districts" ? "district" : "school";
     setEntType(base);
     setEntScope(base === "both" ? "mixed" : type);
     setEntities(
       entities
-        .filter((e) => (base === "both" || e.type === type) && (!c || e.county === c))
+        .filter((e) => (base === "both" || e.type === type) && (c.length === 0 || c.includes(e.county ?? "")))
         .map((e) => e.id),
       undefined,
       base === "both" ? "both" : type,
@@ -263,11 +265,12 @@ export function Visualizer({
     source?: { kind: "group" | "view"; id: number; name: string },
   ) {
     const hidden = new Set(st.hidden);
+    const cty = coerceCounties(st.county);
     const ids = entities
       .filter((e) => {
         if (st.viewMode === "districts" && e.type !== "district") return false;
         if (st.viewMode === "schools" && e.type !== "school") return false;
-        if (st.county && e.county !== st.county) return false;
+        if (cty.length && !cty.includes(e.county ?? "")) return false;
         return !hidden.has(e.id);
       })
       .map((e) => e.id);
@@ -388,7 +391,7 @@ export function Visualizer({
     const state: SavedViewState = {
       year: spec.data.fields[0]?.years[0] ?? years[0] ?? "",
       viewMode,
-      county: "",
+      county: [],
       hidden,
       collapsed: [],
       districtSort: [],
@@ -610,7 +613,7 @@ export function Visualizer({
     setAiMsgs([]);
     setEntType("districts");
     setEntScope("district");
-    setCounty("");
+    setCounty([]);
   }
 
   // A fresh chart starts on "Districts only" — populate that set once on mount.
@@ -1103,21 +1106,16 @@ export function Visualizer({
             <option value="schools">Schools only</option>
             <option value="both">Districts &amp; schools</option>
           </select>
-          <select value={county} onChange={(e) => { setCounty(e.target.value); applyBase(entType, e.target.value); }} className={`${input} w-full`}>
-            <option value="">All counties</option>
-            {counties.map((c) => (<option key={c} value={c}>{c}</option>))}
-          </select>
-          <label className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500 dark:text-slate-400">Saved Group</span>
-            <select
-              value={provenance?.kind === "group" ? String(provenance.id) : ""}
-              onChange={(e) => e.target.value && applyGroup(e.target.value)}
-              className={`${input} flex-1`}
-            >
-              <option value="">{groups.length ? "Choose a group…" : "No saved groups"}</option>
-              {groups.map((g) => (<option key={g.id} value={g.id}>{g.name} ({g.entityIds.length})</option>))}
-            </select>
-          </label>
+          <MultiSelect
+            options={counties}
+            selected={county}
+            onChange={(next) => { setCounty(next); applyBase(entType, next); }}
+            allLabel="All counties"
+            pluralNoun="counties"
+            searchPlaceholder="Search counties…"
+            title="Filter entities by county"
+            className={`${input} w-full text-left`}
+          />
           <label className="flex items-center gap-2 text-sm">
             <span className="text-slate-500 dark:text-slate-400">Saved View</span>
             <select
@@ -1163,6 +1161,17 @@ export function Visualizer({
               </div>
             </div>
           )}
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-slate-500 dark:text-slate-400">Saved Group</span>
+            <select
+              value={provenance?.kind === "group" ? String(provenance.id) : ""}
+              onChange={(e) => e.target.value && applyGroup(e.target.value)}
+              className={`${input} flex-1`}
+            >
+              <option value="">{groups.length ? "Choose a group…" : "No saved groups"}</option>
+              {groups.map((g) => (<option key={g.id} value={g.id}>{g.name} ({g.entityIds.length})</option>))}
+            </select>
+          </label>
 
           {/* Fields */}
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fields</p>
