@@ -70,9 +70,9 @@ A "sheet" object looks like:
   "columns": [ { "id": "c1", "metric": "<code>", "year": "2023-24", "subgroup": "All Students" } ],
   "calc": [ { "name": "My score", "type": "avg", "sources": ["c1","c2"], "weights": {"c1":50,"c2":50}, "asPercent": false, "refDistrict": "<district name>" } ],
   "viewMode": "districts" | "schools" | "both" | "keep",
-  "county": "<county name>" | "all" | "keep",
+  "county": "<county name>" | ["<county name>", ...] | "all" | "keep",
   "group": "<group name>" | "none" | "keep",
-  "sort": { "metric": "<code>", "year": "2023-24", "direction": "desc" | "asc" } | null
+  "sort": { "metric": "<code or calc-field name>", "year": "2023-24", "direction": "desc" | "asc" } | null
 }
 
 Calculated fields (the "calc" array) derive new columns from the data columns. Pick "type":
@@ -101,7 +101,8 @@ Rules:
 - "metric" MUST be a code above; "year"/"subgroup"/"group"/"county"/"refDistrict" MUST be real values from the lists above.
 - "calc" "sources" and "weights" keys MUST be "id"s you defined in "columns".
 - "viewMode":"keep", "county":"keep", "group":"keep" leave those as they are. "county":"all" clears the county filter; "group":"none" clears the group filter.
-- "sort" (optional) sorts the rows by a column: use that column's metric code (and year). To sort by an existing column, just reference its metric/year — you don't need to resend it.
+- To filter to a REGION or several counties, set "county" to an ARRAY of EVERY county name in it (e.g. ["Nassau", "Suffolk"]). A single county can be a plain string. Every name MUST be from the Counties list above. This is the ONLY way to filter by county — never say you filtered by counties unless you put them in "county".
+- "sort" (optional) sorts the rows by a column. Set "metric" to the column's metric code (and "year"), OR to a calculated field's exact name to sort by that. To sort by a column already in the table, just reference it — you don't need to resend "columns". WHENEVER you tell the user you sorted the table, you MUST include the "sort" object in the sheet — describing a sort in your reply without "sort" does nothing.
 If you change the columns, list ALL of them (it replaces the whole table). But to ONLY sort or change the view/county/group, OMIT "columns" entirely to keep the current table — this is much faster than re-listing everything.
 You can also SUGGEST a calculated field in "reply" (describe it) and only add it to "calc" when the user agrees.
 Output ONLY the JSON object, no prose outside it.`;

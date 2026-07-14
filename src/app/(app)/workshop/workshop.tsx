@@ -338,7 +338,20 @@ export function Workshop({
     if (!sheet || typeof sheet !== "object") return;
     const s = sheet as Record<string, unknown>;
     if (s.viewMode === "districts" || s.viewMode === "schools" || s.viewMode === "both") setViewMode(s.viewMode);
-    if (typeof s.county === "string" && s.county !== "keep") setCounty(s.county === "all" ? [] : [s.county]);
+    // county: a single name, "all"/"none" (clear), "keep", or an ARRAY of names
+    // (a region). Map case-insensitively to the canonical county so a small
+    // casing/spacing slip from Scout still filters instead of showing nothing.
+    if (s.county !== undefined && s.county !== "keep") {
+      if (s.county === "all" || s.county === "none") setCounty([]);
+      else {
+        const byLower = new Map(counties.map((c) => [c.toLowerCase(), c]));
+        const wanted = Array.isArray(s.county) ? s.county : [s.county];
+        const valid = wanted
+          .map((c) => byLower.get(String(c).trim().toLowerCase()))
+          .filter((c): c is string => !!c);
+        setCounty(valid);
+      }
+    }
     if (typeof s.group === "string" && s.group !== "keep") {
       if (s.group === "none") applyGroup("");
       else {
@@ -503,11 +516,22 @@ export function Workshop({
     if (so && typeof so === "object") {
       const code = String(so.metric ?? "");
       const yr = typeof so.year === "string" ? so.year : "";
-      const target = finalCols.find(
-        (c): c is DataColumn => c.kind === "data" && c.metric.code === code && (!yr || c.year === yr),
-      );
+      const lc = code.toLowerCase();
+      // Prefer an exact metric+year data column; then that metric at ANY year (a
+      // wrong/omitted year shouldn't drop the sort); then a calc field whose name
+      // Scout referenced (so "sort by my similarity score" works); then the
+      // table's rank/similarity calc if there is one.
+      const target =
+        finalCols.find((c): c is DataColumn => c.kind === "data" && c.metric.code === code && (!yr || c.year === yr)) ??
+        finalCols.find((c): c is DataColumn => c.kind === "data" && c.metric.code === code) ??
+        finalCols.find(
+          (c): c is DataColumn => c.kind === "data" && (c.metric.name.toLowerCase() === lc || c.metric.code.toLowerCase() === lc),
+        );
+      const calcTarget =
+        !target &&
+        finalCols.find((c): c is CalcColumn => c.kind === "calc" && c.name.toLowerCase() === lc);
       const dir = so.direction === "asc" ? "asc" : "desc";
-      const key = target?.id ?? rankCalc?.id;
+      const key = target?.id ?? (calcTarget ? calcTarget.id : undefined) ?? rankCalc?.id;
       if (key) {
         applySort("district", key, dir, false);
         applySort("school", key, dir, false);
@@ -526,9 +550,8 @@ export function Workshop({
     columns.forEach((c, i) => c.kind === "data" && handleOf.set(c.id, `c${i + 1}`));
     const state = {
       viewMode,
-      // Scout's protocol takes a single county; report one when exactly one is
-      // filtered, otherwise "all" (a multi-county filter reads as unfiltered).
-      county: county.length === 1 ? county[0] : "all",
+      // The active county filter (an array of names, or "all" when unfiltered).
+      county: county.length ? county : "all",
       group: groups.find((g) => String(g.id) === groupFilter)?.name ?? null,
       columns: columns
         .filter((c): c is DataColumn => c.kind === "data")

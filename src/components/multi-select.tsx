@@ -42,7 +42,12 @@ export function MultiSelect({
 
   const sel = useMemo(() => new Set(selected), [selected]);
   const needle = q.trim().toLowerCase();
-  const shown = needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options;
+  // Filter by the search, then float selected options to the top (each block
+  // keeps its natural order) — the same behaviour as the entity picker.
+  const shown = useMemo(() => {
+    const matched = needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options;
+    return [...matched].sort((a, b) => (sel.has(a) ? 0 : 1) - (sel.has(b) ? 0 : 1));
+  }, [options, needle, sel]);
 
   const label =
     selected.length === 0
