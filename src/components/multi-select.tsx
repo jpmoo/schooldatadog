@@ -14,6 +14,7 @@ export function MultiSelect({
   onChange,
   allLabel = "All",
   pluralNoun = "selected",
+  noun,
   searchPlaceholder = "Search…",
   className = "",
   title,
@@ -23,6 +24,9 @@ export function MultiSelect({
   onChange: (next: string[]) => void;
   allLabel?: string;
   pluralNoun?: string;
+  /** When set, the button reads "Noun (all)" / "Noun (n of total)", mirroring the
+   *  entities menu. Otherwise it shows the selection itself (name / "n plural"). */
+  noun?: string;
   searchPlaceholder?: string;
   className?: string;
   title?: string;
@@ -49,8 +53,9 @@ export function MultiSelect({
     return [...matched].sort((a, b) => (sel.has(a) ? 0 : 1) - (sel.has(b) ? 0 : 1));
   }, [options, needle, sel]);
 
-  const label =
-    selected.length === 0
+  const label = noun
+    ? `${noun} (${selected.length === 0 ? "all" : `${selected.length} of ${options.length}`})`
+    : selected.length === 0
       ? allLabel
       : selected.length === 1
         ? selected[0]

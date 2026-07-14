@@ -1110,8 +1110,7 @@ export function Visualizer({
             options={counties}
             selected={county}
             onChange={(next) => { setCounty(next); applyBase(entType, next); }}
-            allLabel="All counties"
-            pluralNoun="counties"
+            noun="Counties"
             searchPlaceholder="Search counties…"
             title="Filter entities by county"
             className={`${input} w-full text-left`}

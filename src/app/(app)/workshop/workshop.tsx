@@ -275,6 +275,17 @@ export function Workshop({
   const [county, setCounty] = useState<string[]>([]);
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [entityPanel, setEntityPanel] = useState(false);
+  // Close the entities popover on an outside click (the button lives inside the
+  // ref, so clicking it still toggles instead of double-firing).
+  const entityMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!entityPanel) return;
+    const onDoc = (e: MouseEvent) => {
+      if (entityMenuRef.current && !entityMenuRef.current.contains(e.target as Node)) setEntityPanel(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [entityPanel]);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [hideEmpty, setHideEmpty] = useState(false);
 
@@ -1410,15 +1421,27 @@ export function Workshop({
               options={counties}
               selected={county}
               onChange={setCounty}
-              allLabel="All counties"
-              pluralNoun="counties"
+              noun="Counties"
               searchPlaceholder="Search counties…"
               title="Filter by county"
               className={btn}
             />
-            <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
-              Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
-            </button>
+            <div className="relative" ref={entityMenuRef}>
+              <button onClick={() => setEntityPanel((v) => !v)} className={btn}>
+                Entities ({hidden.size > 0 ? `${hidden.size} hidden` : "all shown"})
+              </button>
+              {entityPanel && (
+                <EntityPanel
+                  entities={entities.filter((e) =>
+                    viewMode === "districts" ? e.type === "district" : viewMode === "schools" ? e.type === "school" : true,
+                  )}
+                  county={county}
+                  hidden={hidden}
+                  setHidden={applyHidden}
+                  onClose={() => setEntityPanel(false)}
+                />
+              )}
+            </div>
             <select
               value={groupFilter}
               onChange={(e) => applyGroup(e.target.value)}
@@ -1665,18 +1688,6 @@ export function Workshop({
             )}
           </SheetDrop>
         </section>
-
-        {entityPanel && (
-          <EntityPanel
-            entities={entities.filter((e) =>
-              viewMode === "districts" ? e.type === "district" : viewMode === "schools" ? e.type === "school" : true,
-            )}
-            county={county}
-            hidden={hidden}
-            setHidden={applyHidden}
-            onClose={() => setEntityPanel(false)}
-          />
-        )}
 
         {ctx && (
           <SortMenu
@@ -2355,7 +2366,7 @@ function EntityPanel({
     setHidden(n);
   };
   return (
-    <div className="fixed right-4 top-24 z-40 flex max-h-[70vh] w-72 flex-col rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
+    <div className="absolute left-0 top-full z-40 mt-1 flex max-h-[65vh] w-72 flex-col rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
         <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Show / hide entities</span>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
