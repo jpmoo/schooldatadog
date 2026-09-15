@@ -18,6 +18,22 @@ function cookiePath(): string {
   return process.env.BASE_PATH?.trim().replace(/\/+$/, "") || "/";
 }
 
+/**
+ * Whether to mark the session cookie Secure (HTTPS-only). Defaults to on in
+ * production. An HTTP-only deployment — a plain-HTTP box with no TLS in front —
+ * MUST set COOKIE_SECURE=false, or the browser drops the cookie on the insecure
+ * origin and every request looks logged-out (redirect back to /login). Only turn
+ * it off when the transport is otherwise protected (a private LAN, or a
+ * WireGuard/Tailscale network); over the open internet a cleartext session token
+ * can be sniffed.
+ */
+function cookieSecure(): boolean {
+  const v = process.env.COOKIE_SECURE?.trim().toLowerCase();
+  if (v === "true" || v === "1") return true;
+  if (v === "false" || v === "0") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 export type SessionUser = {
   id: number;
   email: string;
@@ -48,7 +64,7 @@ export async function createSession(userId: number, impersonatorId: number | nul
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     sameSite: "lax",
     path: cookiePath(),
     expires: expiresAt,
